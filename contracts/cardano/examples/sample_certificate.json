@@ -1,0 +1,29 @@
+{
+  "_comment": "Canonical certificate format — the normalized off-chain representation before hashing.",
+
+  "issuer_id": "GIA",
+  "report_id": "GIA-123456",
+  "report_type": "origin",
+  "gem_id": "GEM-001",
+
+  "gem_data": {
+    "species": "Corundum",
+    "variety": "Blue Sapphire",
+    "weight_ct": 2.35
+  },
+
+  "images": [
+    {
+      "type": "certificate_scan",
+      "cid": "bafybeigdyrzt5sfp7udm7hu76uh7y26nf3efuylqabf3oclgtqy55fbzdi",
+      "sha256": "9f1c2e6b7d3a4b8f1d2c3e4a5b6c7d8e9f00112233445566778899aabbccdde0"
+    },
+    {
+      "type": "gem_photo",
+      "cid": "bafybeiaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sha256": "b1c2d3e4f567890a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4"
+    }
+  ],
+
+  "document_cid": "bafybeihykld5x6scnrmhkr5yikle4hdezy5mmjaqnrywivgzf4zetwkzly"
+}

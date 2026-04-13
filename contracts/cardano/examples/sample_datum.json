@@ -1,0 +1,21 @@
+{
+  "_comment": "On-chain CertificateDatum — derived from sample_certificate.json. cert_hash = SHA-256(canonical JSON). All ByteArrays are hex-encoded here for readability.",
+
+  "issuer_id": "47494100",
+  "report_id": "4749412d31323334353600",
+  "report_type": 5,
+  "gem_id": "47454d2d30303100",
+  "cert_hash": "a3f8c1e2d4b56789012345678901234567890123456789012345678901234567",
+
+  "_cert_hash_note": "SHA-256 of the deterministically serialized sample_certificate.json",
+
+  "issued_at": 1712700000,
+
+  "_issued_at_note": "Unix timestamp (seconds since epoch) — matches Cardano slot time for auditability",
+
+  "schema_version": 1,
+
+  "document_cid": "bafybeihykld5x6scnrmhkr5yikle4hdezy5mmjaqnrywivgzf4zetwkzly",
+
+  "_document_cid_note": "IPFS CID of the full original PDF certificate from the issuer"
+}

@@ -1,0 +1,8 @@
+pub const REPORT_TYPE_BRIEF: Int = 1
+pub const REPORT_TYPE_IDENTIFICATION: Int = 2
+pub const REPORT_TYPE_DETAILED: Int = 3
+pub const REPORT_TYPE_GRADING: Int = 4
+pub const REPORT_TYPE_ORIGIN: Int = 5
+pub const REPORT_TYPE_TREATMENT: Int = 6
+pub const REPORT_TYPE_SPECIAL_COLOR: Int = 7
+pub const REPORT_TYPE_PEARL: Int = 8

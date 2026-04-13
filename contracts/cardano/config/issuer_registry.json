@@ -1,0 +1,33 @@
+{
+  "_comment": "Issuer registry — maps known issuer IDs to their metadata. Used by the off-chain layer for validation before tx submission. Issuer keys are placeholders until real integration.",
+
+  "issuers": [
+    {
+      "issuer_id": "NGJA",
+      "full_name": "National Gem and Jewellery Authority",
+      "country": "LK",
+      "verification_url": "https://www.ngja.gov.lk",
+      "supported_report_types": [1, 2, 3, 6],
+      "_report_type_ref": "1=Brief, 2=Identification, 3=Detailed, 6=Treatment",
+      "issuer_pubkey_hash": "PLACEHOLDER_NGJA_PKH"
+    },
+    {
+      "issuer_id": "GIC",
+      "full_name": "Gemmological Institute of Colombo",
+      "country": "LK",
+      "verification_url": "https://gicolombo.com",
+      "supported_report_types": [2, 4, 6, 7],
+      "_report_type_ref": "2=Identification, 4=Grading, 6=Treatment, 7=SpecialColor",
+      "issuer_pubkey_hash": "PLACEHOLDER_GIC_PKH"
+    },
+    {
+      "issuer_id": "GIA",
+      "full_name": "Gemological Institute of America",
+      "country": "US",
+      "verification_url": "https://www.gia.edu/report-check",
+      "supported_report_types": [2, 3, 4, 5, 8],
+      "_report_type_ref": "2=Identification, 3=Detailed, 4=Grading, 5=Origin, 8=Pearl",
+      "issuer_pubkey_hash": "PLACEHOLDER_GIA_PKH"
+    }
+  ]
+}
