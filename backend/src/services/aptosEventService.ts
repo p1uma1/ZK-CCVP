@@ -8,6 +8,7 @@ import {
   getEventCount,
   gemExists,
   getLastRecordHash,
+  getEventByIndex,
 } from "../../integrations/aptos/submit_tx";
 import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/build_event";
 
@@ -176,6 +177,34 @@ export async function getGemStatus(gemId: string): Promise<GemStatusResponse> {
   ]);
 
   return { gemId, exists: true, eventCount, lastRecordHash };
+}
+
+export async function getGemHistory(gemId: string) {
+  const exists = await gemExists(aptos, storeOwner, gemId);
+
+  if (!exists) {
+    return {
+      gemId,
+      exists: false,
+      eventCount: 0,
+      history: [],
+    };
+  }
+
+  const count = await getEventCount(aptos, storeOwner, gemId);
+  const history = [];
+
+  for (let i = 0; i < count; i++) {
+    const event = await getEventByIndex(aptos, storeOwner, gemId, i);
+    history.push(event);
+  }
+
+  return {
+    gemId,
+    exists: true,
+    eventCount: count,
+    history,
+  };
 }
 
 export { STAGE, STAGE_LABEL };
