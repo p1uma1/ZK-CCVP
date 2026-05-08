@@ -1,0 +1,5 @@
+# Auto-generated build artifacts — never commit these
+build/
+
+# Aptos CLI profile (contains private key and network config)
+.aptos/
