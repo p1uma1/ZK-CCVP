@@ -1,4 +1,5 @@
-# Node.js
+
+# Dependencies
 node_modules/
 .env
 .DS_Store
@@ -20,8 +21,16 @@ Desktop.ini
 # Build outputs
 dist/
 build/
+*.tsbuildinfo
 
-# VS Code
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
 .vscode/
 
 # Coverage
