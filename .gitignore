@@ -47,3 +47,18 @@ coverage/
 # Ignore contract build artifacts
 contracts/**/build/
 contracts/**/dist/
+
+# Sensitive Data / Build Artifacts
+aptos.json
+plutus.json
+*.key
+*.pem
+secrets.json
+credentials.json
+mnemonic.txt
+*.seed
+keystore/
+.env.local
+.env.*.local
+.env.*
+putos.json
