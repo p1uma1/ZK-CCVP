@@ -1,6 +1,6 @@
 
 import { Request, Response } from "express";
-import { buildUnsignedAnchorTx } from "../../integrations/cardano/submit_tx.js";
+import { buildUnsignedAnchorTx, submitSignedTx } from "../../integrations/cardano/submit_tx.js";
 import type { CanonicalCertificate } from "../../integrations/cardano/canonicalize.js";
 
 export async function createCertificate(req: Request, res: Response): Promise<void> {
@@ -79,6 +79,34 @@ export async function createCertificate(req: Request, res: Response): Promise<vo
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[certificateController] createCertificate error:", message);
+    res.status(500).json({ success: false, error: message });
+  }
+}
+
+/**
+ * POST /api/certificates/submit
+ * Accepts a signed transaction CBOR (hex) from the frontend and submits it.
+ */
+export async function submitCertificate(req: Request, res: Response): Promise<void> {
+  try {
+    const { signedTx } = req.body;
+
+    if (!signedTx || typeof signedTx !== "string") {
+      res.status(400).json({ success: false, error: "signedTx (hex CBOR) is required" });
+      return;
+    }
+
+    console.log(`[certificateController] Submitting signed transaction...`);
+    const txHash = await submitSignedTx(signedTx);
+
+    res.status(200).json({
+      success: true,
+      message: "Transaction submitted successfully",
+      data: { txHash }
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[certificateController] submitCertificate error:", message);
     res.status(500).json({ success: false, error: message });
   }
 }
