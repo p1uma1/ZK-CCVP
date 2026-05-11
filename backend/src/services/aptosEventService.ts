@@ -191,19 +191,82 @@ export async function getGemHistory(gemId: string) {
     };
   }
 
-  const count = await getEventCount(aptos, storeOwner, gemId);
-  const history = [];
+  const eventCount = await getEventCount(aptos, storeOwner, gemId);
+  const history: FrontendHistoryRecord[] = [];
 
-  for (let i = 0; i < count; i++) {
-    const event = await getEventByIndex(aptos, storeOwner, gemId, i);
-    history.push(event);
+  for (let i = 0; i < eventCount; i++) {
+    const rawEvent = await getEventByIndex(aptos, storeOwner, gemId, i);
+    history.push(normalizeHistoryRecord(rawEvent as RawHistoryRecord));
   }
 
   return {
     gemId,
     exists: true,
-    eventCount: count,
+    eventCount,
     history,
+  };
+}
+
+function hexToUtf8(hex: string): string {
+  const clean = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const bytes = new Uint8Array(
+    clean.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) ?? [],
+  );
+  return new TextDecoder().decode(bytes);
+}
+
+function stageLabel(stage: number): string {
+  switch (stage) {
+    case 1:
+      return "Mining";
+    case 2:
+      return "Cutting";
+    case 3:
+      return "Certification";
+    case 4:
+      return "Transport";
+    case 5:
+      return "Wholesale";
+    case 6:
+      return "Retail";
+    case 7:
+      return "Sale";
+    default:
+      return "Unknown";
+  }
+}
+
+type RawHistoryRecord = {
+  actor_address: string;
+  gem_id: string;
+  payload_hash: string;
+  prev_tx_hash: string;
+  sequence_number: string | number;
+  stage: number;
+  timestamp_ms: string | number;
+};
+
+type FrontendHistoryRecord = {
+  gemId: string;
+  stage: number;
+  stageLabel: string;
+  actorAddress: string;
+  timestampMs: number;
+  prevTxHash: string;
+  payloadHash: string;
+  sequenceNumber: number;
+};
+
+function normalizeHistoryRecord(raw: RawHistoryRecord): FrontendHistoryRecord {
+  return {
+    gemId: hexToUtf8(raw.gem_id),
+    stage: Number(raw.stage),
+    stageLabel: stageLabel(Number(raw.stage)),
+    actorAddress: raw.actor_address,
+    timestampMs: Number(raw.timestamp_ms),
+    prevTxHash: raw.prev_tx_hash,
+    payloadHash: raw.payload_hash,
+    sequenceNumber: Number(raw.sequence_number),
   };
 }
 
