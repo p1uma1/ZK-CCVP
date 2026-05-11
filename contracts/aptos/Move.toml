@@ -1,0 +1,13 @@
+[package]
+name = "gem_trace"
+version = "0.1.0"
+authors = ["ZK-CCVP Team"]
+
+[addresses]
+gem_trace       = "0x402167f872e7859cae6b9c13815ad829191567aed7f79f70780eba795384e4c3"
+aptos_framework = "0x1"
+std             = "0x1"
+aptos_std       = "0x1"
+
+[dependencies]
+AptosFramework = { local = "C:\\Users\\Hiran\\aptos-core-framework\\aptos-move\\framework\\aptos-framework" }

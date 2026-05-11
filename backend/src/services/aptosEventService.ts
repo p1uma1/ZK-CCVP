@@ -8,8 +8,9 @@ import {
   getEventCount,
   gemExists,
   getLastRecordHash,
-} from "../../integrations/aptos/submit_tx.js";
-import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/build_event.js";
+  getEventByIndex,
+} from "../../integrations/aptos/submit_tx";
+import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/build_event";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,31 +18,31 @@ import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/bu
 
 export interface LogEventRequest {
   /** Gemstone identifier — e.g. "GEM-LK-SAP-2024-00147" */
-  gemId:        string;
+  gemId: string;
   /** Stage number 1–7 */
-  stage:        StageValue;
+  stage: StageValue;
   /** Actor's Aptos address */
   actorAddress: string;
   /** Free-form metadata stored in off-chain IPFS payload */
-  metadata:     Record<string, unknown>;
+  metadata: Record<string, unknown>;
   /** IPFS CIDs of supporting documents (optional) */
   attachments?: string[];
 }
 
 export interface LogEventResponse {
-  success:        boolean;
-  txHash:         string;
-  gemId:          string;
-  stage:          number;
-  stageLabel:     string;
+  success: boolean;
+  txHash: string;
+  gemId: string;
+  stage: number;
+  stageLabel: string;
   sequenceNumber: number;
-  message:        string;
+  message: string;
 }
 
 export interface GemStatusResponse {
-  gemId:          string;
-  exists:         boolean;
-  eventCount:     number;
+  gemId: string;
+  exists: boolean;
+  eventCount: number;
   lastRecordHash: string;
 }
 
@@ -49,7 +50,7 @@ export interface GemStatusResponse {
 // Shared Aptos client (initialised once, reused per request)
 // ---------------------------------------------------------------------------
 
-const aptos      = createClientFromEnv();
+const aptos = createClientFromEnv();
 const storeOwner = process.env.APTOS_MODULE_ADDRESS ?? "";
 
 // ---------------------------------------------------------------------------
@@ -77,9 +78,9 @@ const storeOwner = process.env.APTOS_MODULE_ADDRESS ?? "";
  * );
  */
 export async function registerNewGem(
-  gemId:            string,
-  actorAddress:     string,
-  metadata:         Record<string, unknown>,
+  gemId: string,
+  actorAddress: string,
+  metadata: Record<string, unknown>,
   ethereumTokenId?: string,
 ): Promise<LogEventResponse> {
   const signer = createAccountFromEnv();
@@ -118,7 +119,7 @@ export async function registerNewGem(
  * }, signer);
  */
 export async function logSupplyChainEvent(
-  req:    LogEventRequest,
+  req: LogEventRequest,
   signer: ReturnType<typeof createAccountFromEnv>,
 ): Promise<LogEventResponse> {
 
@@ -133,23 +134,23 @@ export async function logSupplyChainEvent(
   // 3. Build payload, hash it, submit transaction to Aptos
   const { txHash } = await anchorGemEvent(aptos, signer, {
     storeOwner,
-    gemId:          req.gemId,
-    stage:          req.stage,
-    prevTxHashHex:  prevRecordHash,
-    actorAddress:   req.actorAddress,
+    gemId: req.gemId,
+    stage: req.stage,
+    prevTxHashHex: prevRecordHash,
+    actorAddress: req.actorAddress,
     sequenceNumber: currentCount,
-    metadata:       req.metadata,
-    attachments:    req.attachments,
+    metadata: req.metadata,
+    attachments: req.attachments,
   });
 
   return {
-    success:        true,
+    success: true,
     txHash,
-    gemId:          req.gemId,
-    stage:          req.stage,
-    stageLabel:     STAGE_LABEL[req.stage],
+    gemId: req.gemId,
+    stage: req.stage,
+    stageLabel: STAGE_LABEL[req.stage],
     sequenceNumber: currentCount,
-    message:        `${STAGE_LABEL[req.stage]} event logged successfully`,
+    message: `${STAGE_LABEL[req.stage]} event logged successfully`,
   };
 }
 
@@ -176,6 +177,34 @@ export async function getGemStatus(gemId: string): Promise<GemStatusResponse> {
   ]);
 
   return { gemId, exists: true, eventCount, lastRecordHash };
+}
+
+export async function getGemHistory(gemId: string) {
+  const exists = await gemExists(aptos, storeOwner, gemId);
+
+  if (!exists) {
+    return {
+      gemId,
+      exists: false,
+      eventCount: 0,
+      history: [],
+    };
+  }
+
+  const count = await getEventCount(aptos, storeOwner, gemId);
+  const history = [];
+
+  for (let i = 0; i < count; i++) {
+    const event = await getEventByIndex(aptos, storeOwner, gemId, i);
+    history.push(event);
+  }
+
+  return {
+    gemId,
+    exists: true,
+    eventCount: count,
+    history,
+  };
 }
 
 export { STAGE, STAGE_LABEL };

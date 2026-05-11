@@ -1,4 +1,25 @@
-
-node_modules/
-dist/
+# Environment variables — NEVER commit real keys
 .env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Aptos CLI config (contains private key)
+.aptos/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

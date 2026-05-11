@@ -6,9 +6,10 @@ import {
   logSupplyChainEvent,
   getGemStatus,
   STAGE,
-} from "../services/aptosEventService.js";
-import { createAccountFromEnv } from "../../integrations/aptos/submit_tx.js";
-import { type StageValue } from "../../integrations/aptos/build_event.js";
+  getGemHistory
+} from "../services/aptosEventService";
+import { createAccountFromEnv } from "../../integrations/aptos/submit_tx";
+import type { StageValue } from "../../integrations/aptos/build_event";
 
 
 export async function registerGem(req: Request, res: Response): Promise<void> {
@@ -79,13 +80,7 @@ export async function logEvent(req: Request, res: Response): Promise<void> {
 
     const signer = createAccountFromEnv();
     const result = await logSupplyChainEvent(
-      {
-        gemId,
-        stage: stage as StageValue,
-        actorAddress,
-        metadata,
-        attachments
-      },
+      { gemId, stage: stage as StageValue, actorAddress, metadata, attachments },
       signer,
     );
 
@@ -133,6 +128,23 @@ export async function getGem(req: Request, res: Response): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[aptosEventController] getGem error:", message);
+    res.status(500).json({ success: false, error: message });
+  }
+}
+
+export async function getGemHistoryHandler(req: Request, res: Response): Promise<void> {
+  try {
+    const { gemId } = req.params;
+
+    if (!gemId) {
+      res.status(400).json({ success: false, error: "gemId is required" });
+      return;
+    }
+
+    const result = await getGemHistory(gemId);
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ success: false, error: message });
   }
 }
