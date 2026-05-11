@@ -7,4 +7,5 @@ pub type CertificateDatum {
   issued_at: Int,
   schema_version: Int,
   document_cid: ByteArray,
+  issuer_pkh: ByteArray,
 }

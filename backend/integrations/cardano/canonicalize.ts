@@ -24,6 +24,7 @@ export interface CanonicalCertificate {
   gem_id: string;
   images: CertificateImage[];
   issuer_id: string;
+  issuer_pkh: string;
   report_id: string;
   report_type: string;
 }

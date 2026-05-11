@@ -15,8 +15,8 @@ import {
   buildLogEventParams,
   type LogEventInput,
   type LogEventParams,
-} from "./build_event";
-import type { EventPayload } from "./hash";
+} from "./build_event.js";
+import type { EventPayload } from "./hash.js";
 
 // ---------------------------------------------------------------------------
 // Config — read from environment
@@ -114,8 +114,9 @@ export async function submitLogEvent(
   const pendingTx: PendingTransactionResponse =
     await aptos.signAndSubmitTransaction({ signer, transaction });
 
-  const committed: UserTransactionResponse =
-    await aptos.waitForTransaction({ transactionHash: pendingTx.hash });
+  const committed = (await aptos.waitForTransaction({
+    transactionHash: pendingTx.hash,
+  })) as UserTransactionResponse;
 
   if (!committed.success) {
     throw new Error(

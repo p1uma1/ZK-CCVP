@@ -1,48 +1,113 @@
-/**
- * submit_tx.ts (Draft)
- * 
- * This file demonstrates how to use the off-chain utilities to submit a 
- * certificate anchoring transaction to Cardano.
- * 
- * Note: This uses placeholders for a provider (e.g., Blockfrost) and 
- * a wallet/signer, which would be configured in a real environment.
- */
+import "dotenv/config";
+import { Lucid, Blockfrost, Data, type SpendingValidator } from "lucid-cardano";
+import { buildCertificateDatum } from "./build_datum.js";
+import type { CanonicalCertificate } from "./canonicalize.js";
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
+import { applyDoubleCborEncoding } from "lucid-cardano";
 
-// import { Lucid, Blockfrost, Data } from "lucid-cardano"; // Example library
-import { buildCertificateDatum } from "./build_datum";
-import type { CanonicalCertificate } from "./canonicalize";
+
+// Define __dirname for ESM
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const CertificateDatumSchema = Data.Object({
+  issuer_id: Data.Bytes(),
+  report_id: Data.Bytes(),
+  report_type: Data.Integer(),
+  gem_id: Data.Bytes(),
+  cert_hash: Data.Bytes(),
+  issued_at: Data.Integer(),
+  schema_version: Data.Integer(),
+  document_cid: Data.Bytes(),
+  issuer_pkh: Data.Bytes(),
+});
+
+type CertificateDatum = Data.Static<typeof CertificateDatumSchema>;
 
 /**
- * Example function to anchor a certificate.
- * In a real app, 'lucid' and 'scriptAddress' would be provided via config/context.
+ * Initializes Lucid with a Blockfrost provider (No private key needed).
  */
-export async function anchorCertificate(
+async function initLucid(): Promise<Lucid> {
+  const network = (process.env.CARDANO_NETWORK ?? "Preprod") as any;
+  const blockfrostProjectId = process.env.BLOCKFROST_PROJECT_ID;
+  const apiUtl = `https://cardano-${network.toLowerCase()}.blockfrost.io/api/v0`;
+
+  if (!blockfrostProjectId) {
+    throw new Error("BLOCKFROST_PROJECT_ID is not set in .env");
+  }
+
+  return await Lucid.new(new Blockfrost(apiUtl, blockfrostProjectId), network);
+}
+
+
+function getValidator(): SpendingValidator {
+  const plutusPath = path.resolve(__dirname, "../../../contracts/cardano/plutus.json");
+  const plutusJson = JSON.parse(fs.readFileSync(plutusPath, "utf-8"));
+  const validator = plutusJson.validators.find(
+    (v: any) => v.title === "certificate_validator.certificate_validator.spend"
+  );
+  if (!validator) throw new Error("Validator not found in plutus.json");
+
+  return {
+    type: "PlutusV2",
+    script: applyDoubleCborEncoding(validator.compiledCode),
+  };
+}
+
+/**
+ * Builds an UNSIGNED transaction CBOR to be signed by a frontend wallet.
+ */
+export async function buildUnsignedAnchorTx(
   cert: CanonicalCertificate,
   reportTypeInt: number,
-  scriptAddress: string
+  userAddress: string // Needed to select UTXOs for the transaction
 ) {
-  // 1. Initialize metadata
+
+  const lucid = await initLucid();
+
+  const validator = getValidator();
+  const scriptAddress = lucid.utils.validatorToAddress(validator);
+
+  // 1. Prepare Datum
   const issuedAt = Math.floor(Date.now() / 1000);
+  const rawDatum = buildCertificateDatum(cert, reportTypeInt, issuedAt);
+  
+  // Pass the object DIRECTLY. Lucid's Data.Nullable handles the "Some" wrapping.
+  const lucidDatum = {
+    issuer_id:      toHex(rawDatum.issuer_id),
+    report_id:      toHex(rawDatum.report_id),
+    report_type:    BigInt(rawDatum.report_type),
+    gem_id:         toHex(rawDatum.gem_id),
+    cert_hash:      toHex(rawDatum.cert_hash),
+    issued_at:      BigInt(rawDatum.issued_at),
+    schema_version: BigInt(rawDatum.schema_version),
+    document_cid:   toHex(rawDatum.document_cid),
+    issuer_pkh:     toHex(rawDatum.issuer_pkh),
+  };
 
-  // 2. Build the datum
-  const datum = buildCertificateDatum(cert, reportTypeInt, issuedAt);
+  console.log("[Cardano] Datum Keys count:", Object.keys(lucidDatum).length);
+  console.log("[Cardano] Datum fields:", JSON.stringify(lucidDatum, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
 
-  /**
-   * 3. Construct and submit the transaction (Logic skeleton)
-   * 
-   * const tx = await lucid
-   *   .newTx()
-   *   .payToContract(scriptAddress, { inline: Data.to(datum, CertificateDatumSchema) }, { lovelace: 2000000n })
-   *   .complete();
-   * 
-   * const signedTx = await tx.sign().complete();
-   * const txHash = await signedTx.submit();
-   * 
-   * return txHash;
-   */
+  // 2. Select the user's wallet as the source of funds
+  lucid.selectWalletFrom({ address: userAddress });
 
-  console.log("Simulating transaction submission for GemID:", cert.gem_id);
-  console.log("Datum to be anchored:", datum);
+  // 3. Build Unsigned Transaction
+  console.log("[Cardano] Building transaction...");
+  const tx = await lucid
+    .newTx()
+    .payToContract(
+      scriptAddress,
+      { inline: Data.to(lucidDatum, Data.Nullable(CertificateDatumSchema) as any) },
+      { lovelace: 2000000n }
+    )
+    .complete();
 
-  return "tx_hash_placeholder_" + cert.report_id;
+  // Return the CBOR string
+  return tx.toString();
+}
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }

@@ -8,8 +8,8 @@ import {
   getEventCount,
   gemExists,
   getLastRecordHash,
-} from "../../integrations/aptos/submit_tx";
-import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/build_event";
+} from "../../integrations/aptos/submit_tx.js";
+import { STAGE, STAGE_LABEL, type StageValue } from "../../integrations/aptos/build_event.js";
 
 // ---------------------------------------------------------------------------
 // Types

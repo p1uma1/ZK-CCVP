@@ -1,5 +1,5 @@
-import { hashCertificateBytes } from "./hash";
-import type { CanonicalCertificate } from "./canonicalize";
+import { hashCertificateBytes } from "./hash.js";
+import type { CanonicalCertificate } from "./canonicalize.js";
 
 /**
  * CertificateDatum interface for off-chain usage.
@@ -14,6 +14,7 @@ export interface CertificateDatum {
   issued_at: bigint;
   schema_version: bigint;
   document_cid: Uint8Array;
+  issuer_pkh: Uint8Array;
 }
 
 /**
@@ -21,6 +22,18 @@ export interface CertificateDatum {
  */
 function textToBytes(text: string): Uint8Array {
   return new TextEncoder().encode(text);
+}
+
+/**
+ * Helper to convert a hex string to Uint8Array
+ */
+function hexToBytes(hex: string): Uint8Array {
+  const cleanHex = hex.startsWith("#") ? hex.slice(1) : hex;
+  const result = new Uint8Array(cleanHex.length / 2);
+  for (let i = 0; i < result.length; i++) {
+    result[i] = parseInt(cleanHex.substr(i * 2, 2), 16);
+  }
+  return result;
 }
 
 /**
@@ -45,5 +58,6 @@ export function buildCertificateDatum(
     issued_at: BigInt(issuedAt),
     schema_version: 1n, // Initial version
     document_cid: textToBytes(cert.document_cid),
+    issuer_pkh: hexToBytes(cert.issuer_pkh),
   };
 }

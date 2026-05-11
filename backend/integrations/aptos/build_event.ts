@@ -17,7 +17,7 @@
  * display without importing the Move source.
  */
 
-import { hashEventPayloadBytes, type EventPayload } from "./hash";
+import { hashEventPayloadBytes, type EventPayload } from "./hash.js";
 
 // ---------------------------------------------------------------------------
 // Stage constants — mirrors event_record.move

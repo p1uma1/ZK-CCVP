@@ -1,8 +1,10 @@
-use ./types/certificate_datum
-use ./types/report_type
+use aiken/primitive/bytearray
+
+use types/certificate_datum.{CertificateDatum}
 
 validator certificate_validator {
-  spend(datum: CertificateDatum, _, _, _) {
+  spend(datum: Option<CertificateDatum>, _redeemer, _ref, _ctx) {
+    expect Some(datum) = datum
     expect True = datum.report_type >= 1
     expect True = datum.report_type <= 8
 

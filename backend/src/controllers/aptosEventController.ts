@@ -6,8 +6,9 @@ import {
   logSupplyChainEvent,
   getGemStatus,
   STAGE,
-} from "../services/aptosEventService";
-import { createAccountFromEnv } from "../../integrations/aptos/submit_tx";
+} from "../services/aptosEventService.js";
+import { createAccountFromEnv } from "../../integrations/aptos/submit_tx.js";
+import { type StageValue } from "../../integrations/aptos/build_event.js";
 
 
 export async function registerGem(req: Request, res: Response): Promise<void> {
@@ -71,14 +72,20 @@ export async function logEvent(req: Request, res: Response): Promise<void> {
     if (stage === STAGE.MINING) {
       res.status(400).json({
         success: false,
-        error:   "Use POST /api/aptos/gems to register a new gem (Mining stage)",
+        error: "Use POST /api/aptos/gems to register a new gem (Mining stage)",
       });
       return;
     }
 
     const signer = createAccountFromEnv();
     const result = await logSupplyChainEvent(
-      { gemId, stage, actorAddress, metadata, attachments },
+      {
+        gemId,
+        stage: stage as StageValue,
+        actorAddress,
+        metadata,
+        attachments
+      },
       signer,
     );
 
