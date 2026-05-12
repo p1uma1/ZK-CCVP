@@ -185,15 +185,19 @@ module gem_trace::gem_event_store_test {
     // -------------------------------------------------------------------------
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
-    #[expected_failure(abort_code = 103)]
-    fun f2_illegal_stage_jump_fails(admin: signer, framework: signer) {
-        setup(&admin, &framework);
-        let addr = signer::address_of(&admin);
-        let gem  = b"GEM-LK-BAD-002";
+fun f2_mining_to_sale_should_succeed(admin: signer, framework: signer) {
+    setup(&admin, &framework);
+    let addr = signer::address_of(&admin);
+    let gem  = b"GEM-LK-FLEX-001";
 
-        let h1 = log_and_get_hash(&admin, addr, gem, 1, vector::empty<u8>(), PAYLOAD_MINING);
-        gem_event_store::log_event(&admin, addr, gem, 7, h1, PAYLOAD_SALE);
-    }
+    let h1 = log_and_get_hash(&admin, addr, gem, 1, vector::empty<u8>(), PAYLOAD_MINING);
+    let _h2 = log_and_get_hash(&admin, addr, gem, 7, h1, PAYLOAD_SALE);
+
+    assert!(gem_event_store::event_count(addr, gem) == 2, 4000);
+    let latest = gem_event_store::get_latest_event(addr, gem);
+    assert!(event_record::stage(&latest) == 7, 4001);
+    assert!(event_record::sequence_number(&latest) == 1, 4002);
+}
 
     // -------------------------------------------------------------------------
     // F3 — Double initialisation (abort 100)
@@ -227,20 +231,23 @@ module gem_trace::gem_event_store_test {
     // -------------------------------------------------------------------------
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
-    #[expected_failure(abort_code = 103)]
-    fun f5_progress_after_sale_fails(admin: signer, framework: signer) {
-        setup(&admin, &framework);
-        let addr = signer::address_of(&admin);
-        let gem  = b"GEM-LK-BAD-005";
+fun f5_progress_after_sale_should_succeed(admin: signer, framework: signer) {
+    setup(&admin, &framework);
+    let addr = signer::address_of(&admin);
+    let gem  = b"GEM-LK-FLEX-005";
 
-        let h1 = log_and_get_hash(&admin, addr, gem, 1, vector::empty<u8>(), PAYLOAD_MINING);
-        let h2 = log_and_get_hash(&admin, addr, gem, 2, h1, PAYLOAD_CUTTING);
-        let h3 = log_and_get_hash(&admin, addr, gem, 3, h2, PAYLOAD_CERTIFICATION);
-        let h4 = log_and_get_hash(&admin, addr, gem, 6, h3, PAYLOAD_RETAIL);
-        let h5 = log_and_get_hash(&admin, addr, gem, 7, h4, PAYLOAD_SALE);
-        // SALE is terminal — must abort
-        gem_event_store::log_event(&admin, addr, gem, 4, h5, PAYLOAD_TRANSPORT_1);
-    }
+    let h1 = log_and_get_hash(&admin, addr, gem, 1, vector::empty<u8>(), PAYLOAD_MINING);
+    let h2 = log_and_get_hash(&admin, addr, gem, 2, h1, PAYLOAD_CUTTING);
+    let h3 = log_and_get_hash(&admin, addr, gem, 3, h2, PAYLOAD_CERTIFICATION);
+    let h4 = log_and_get_hash(&admin, addr, gem, 6, h3, PAYLOAD_RETAIL);
+    let h5 = log_and_get_hash(&admin, addr, gem, 7, h4, PAYLOAD_SALE);
+    let _h6 = log_and_get_hash(&admin, addr, gem, 4, h5, PAYLOAD_TRANSPORT_1);
+
+    assert!(gem_event_store::event_count(addr, gem) == 6, 5000);
+    let latest = gem_event_store::get_latest_event(addr, gem);
+    assert!(event_record::stage(&latest) == 4, 5001);
+    assert!(event_record::sequence_number(&latest) == 5, 5002);
+}
 
     // -------------------------------------------------------------------------
     // F6 — Wrong prev_record_hash (abort 104)

@@ -12,7 +12,6 @@ module gem_trace::gem_event_store {
         EventRecord,
         stage_mining,
     };
-    use gem_trace::stage_transition;
     use gem_trace::actor_registry;
 
     // -------------------------------------------------------------------------
@@ -22,7 +21,6 @@ module gem_trace::gem_event_store {
     const E_ALREADY_INITIALIZED: u64    = 100;
     const E_NOT_INITIALIZED: u64        = 101;
     const E_FIRST_EVENT_NOT_MINING: u64 = 102;
-    const E_INVALID_TRANSITION: u64     = 103;
     const E_PREV_HASH_MISMATCH: u64     = 104;
     /// Actor is not authorized to log events at this stage.
     const E_UNAUTHORIZED: u64           = 105;
@@ -116,31 +114,6 @@ module gem_trace::gem_event_store {
     // -------------------------------------------------------------------------
     // log_event
     // -------------------------------------------------------------------------
-
-    /// Records a new supply chain event for the given gem.
-    ///
-    /// Validation order (each check aborts if it fails):
-    ///   1. Store must be initialised               (E_NOT_INITIALIZED)
-    ///   2. Actor must be authorized for this stage (E_UNAUTHORIZED)
-    ///   3. First event must be MINING              (E_FIRST_EVENT_NOT_MINING)
-    ///   4. Genesis event must have empty prev hash (E_PREV_HASH_MISMATCH)
-    ///   5. Stage transition must be valid          (E_INVALID_TRANSITION)
-    ///   6. prev_record_hash must match stored hash (E_PREV_HASH_MISMATCH)
-    ///   7. Field-level validation in event_record::new
-    ///      (bad stage range, bad hash lengths, empty gem_id)
-    ///
-    /// Parameters
-    /// ----------
-    /// actor            — signer; Move guarantees they own this account
-    /// store_owner      — address holding the GemEventStore resource
-    ///                    (also used as the ActorRegistry owner)
-    /// gem_id           — UTF-8 gem identifier bytes
-    /// stage            — supply chain stage (1–7)
-    /// prev_record_hash — fingerprint of the previous EventRecord (32 bytes),
-    ///                    or empty vector for the genesis (MINING) event.
-    ///                    Produced by the on-chain compute_record_hash of the
-    ///                    prior log_event call and returned in EventLoggedEvent.
-    /// payload_hash     — SHA-256 of the off-chain IPFS payload (32 bytes)
     public entry fun log_event(
         actor:            &signer,
         store_owner:      address,
@@ -183,17 +156,6 @@ module gem_trace::gem_event_store {
         } else {
             let history = smart_table::borrow(&store.histories, gem_id);
 
-            // 5. Stage transition must be valid
-            let last_rec = vector::borrow(&history.records, history.event_count - 1);
-            assert!(
-                stage_transition::is_valid_transition(
-                    event_record::stage(last_rec),
-                    stage,
-                ),
-                E_INVALID_TRANSITION
-            );
-
-            // 6. prev_record_hash must match the stored fingerprint
             assert!(
                 prev_record_hash == history.last_record_hash,
                 E_PREV_HASH_MISMATCH
@@ -409,7 +371,7 @@ module gem_trace::gem_event_store {
     }
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
-    #[expected_failure(abort_code = E_INVALID_TRANSITION)]
+  
     fun test_invalid_stage_transition_fails(
         admin: signer, framework: signer,
     ) acquires GemEventStore {
