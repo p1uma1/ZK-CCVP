@@ -32,29 +32,33 @@ import type { EventPayload } from "../../integrations/aptos/hash";
 // ---------------------------------------------------------------------------
 
 export interface LogEventRequest {
+
   gemId:        string;
   stage:        StageValue;
   actorAddress: string;
   metadata:     Record<string, unknown>;
+ main
   attachments?: string[];
 }
 
 export interface LogEventResponse {
-  success:        boolean;
-  txHash:         string;
-  gemId:          string;
-  stage:          number;
-  stageLabel:     string;
+  success: boolean;
+  txHash: string;
+  gemId: string;
+  stage: number;
+  stageLabel: string;
   sequenceNumber: number;
+
   ipfsCid:        string;
   ipfsUrl:        string;
   message:        string;
+
 }
 
 export interface GemStatusResponse {
-  gemId:          string;
-  exists:         boolean;
-  eventCount:     number;
+  gemId: string;
+  exists: boolean;
+  eventCount: number;
   lastRecordHash: string;
 }
 
@@ -62,7 +66,7 @@ export interface GemStatusResponse {
 // Shared Aptos client
 // ---------------------------------------------------------------------------
 
-const aptos      = createClientFromEnv();
+const aptos = createClientFromEnv();
 const storeOwner = process.env.APTOS_MODULE_ADDRESS ?? "";
 
 // ---------------------------------------------------------------------------
@@ -75,9 +79,9 @@ const storeOwner = process.env.APTOS_MODULE_ADDRESS ?? "";
  * Called by: POST /api/aptos/gems
  */
 export async function registerNewGem(
-  gemId:            string,
-  actorAddress:     string,
-  metadata:         Record<string, unknown>,
+  gemId: string,
+  actorAddress: string,
+  metadata: Record<string, unknown>,
   ethereumTokenId?: string,
 ): Promise<LogEventResponse> {
   const signer = createAccountFromEnv();
@@ -110,7 +114,7 @@ export async function registerNewGem(
  * Called by: POST /api/aptos/events
  */
 export async function logSupplyChainEvent(
-  req:    LogEventRequest,
+  req: LogEventRequest,
   signer: ReturnType<typeof createAccountFromEnv>,
 ): Promise<LogEventResponse> {
 
@@ -121,6 +125,7 @@ export async function logSupplyChainEvent(
   const prevRecordHash = currentCount === 0
     ? ""
     : await getLastRecordHash(aptos, storeOwner, req.gemId);
+
 
   // 2. Build the full payload for IPFS
   const timestampMs = Date.now();
@@ -156,8 +161,9 @@ const { txHash } = await anchorGemEvent(aptos, signer, {
   attachments:    req.attachments,
 });
 
+
   return {
-    success:        true,
+    success: true,
     txHash,
     gemId:          req.gemId,
     stage:          req.stage,

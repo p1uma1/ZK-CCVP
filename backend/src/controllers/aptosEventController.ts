@@ -73,7 +73,7 @@ export async function logEvent(req: Request, res: Response): Promise<void> {
     if (stage === STAGE.MINING) {
       res.status(400).json({
         success: false,
-        error:   "Use POST /api/aptos/gems to register a new gem (Mining stage)",
+        error: "Use POST /api/aptos/gems to register a new gem (Mining stage)",
       });
       return;
     }

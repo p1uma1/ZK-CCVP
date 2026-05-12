@@ -27,8 +27,8 @@ import {
   buildLogEventParams,
   type LogEventInput,
   type LogEventParams,
-} from "./build_event";
-import type { EventPayload } from "./hash";
+} from "./build_event.js";
+import type { EventPayload } from "./hash.js";
 
 // ---------------------------------------------------------------------------
 // Config — read from environment
@@ -82,9 +82,9 @@ export function createAccountFromEnv(): Account {
  *   recordHash  — on-chain fingerprint (pass as prev_record_hash next time)
  */
 export async function anchorGemEvent(
-  aptos:  Aptos,
+  aptos: Aptos,
   signer: Account,
-  input:  LogEventInput,
+  input: LogEventInput,
 ): Promise<{ txHash: string; payload: EventPayload }> {
   const { params, payload } = buildLogEventParams(input);
   const txHash = await submitLogEvent(aptos, signer, params);
@@ -102,7 +102,7 @@ export async function anchorGemEvent(
 // ---------------------------------------------------------------------------
 
 export async function submitLogEvent(
-  aptos:  Aptos,
+  aptos: Aptos,
   signer: Account,
   params: LogEventParams,
 ): Promise<string> {
@@ -111,8 +111,8 @@ export async function submitLogEvent(
   const transaction = await aptos.transaction.build.simple({
     sender: signer.accountAddress,
     data: {
-      function:          `${moduleAddr}::gem_event_store::log_event`,
-      typeArguments:     [],
+      function: `${moduleAddr}::gem_event_store::log_event`,
+      typeArguments: [],
       functionArguments: [
         params.storeOwner,
         params.gemId,
@@ -144,7 +144,7 @@ export async function submitLogEvent(
 // ---------------------------------------------------------------------------
 
 export async function initializeEventStore(
-  aptos:    Aptos,
+  aptos: Aptos,
   deployer: Account,
 ): Promise<string> {
   const moduleAddr = getModuleAddress();
@@ -152,8 +152,8 @@ export async function initializeEventStore(
   const transaction = await aptos.transaction.build.simple({
     sender: deployer.accountAddress,
     data: {
-      function:          `${moduleAddr}::gem_event_store::initialize`,
-      typeArguments:     [],
+      function: `${moduleAddr}::gem_event_store::initialize`,
+      typeArguments: [],
       functionArguments: [],
     },
   });
@@ -175,7 +175,7 @@ export async function initializeEventStore(
 }
 
 export async function initializeActorRegistry(
-  aptos:    Aptos,
+  aptos: Aptos,
   deployer: Account,
 ): Promise<string> {
   const moduleAddr = getModuleAddress();
@@ -183,8 +183,8 @@ export async function initializeActorRegistry(
   const transaction = await aptos.transaction.build.simple({
     sender: deployer.accountAddress,
     data: {
-      function:          `${moduleAddr}::actor_registry::initialize`,
-      typeArguments:     [],
+      function: `${moduleAddr}::actor_registry::initialize`,
+      typeArguments: [],
       functionArguments: [],
     },
   });
@@ -210,17 +210,17 @@ export async function initializeActorRegistry(
 // ---------------------------------------------------------------------------
 
 export async function getEventCount(
-  aptos:      Aptos,
+  aptos: Aptos,
   storeOwner: string,
-  gemId:      string,
+  gemId: string,
 ): Promise<number> {
   const moduleAddr = getModuleAddress();
   const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
 
   const result = await aptos.view({
     payload: {
-      function:          `${moduleAddr}::gem_event_store::event_count`,
-      typeArguments:     [],
+      function: `${moduleAddr}::gem_event_store::event_count`,
+      typeArguments: [],
       functionArguments: [storeOwner, gemIdBytes],
     },
   });
@@ -229,17 +229,17 @@ export async function getEventCount(
 }
 
 export async function gemExists(
-  aptos:      Aptos,
+  aptos: Aptos,
   storeOwner: string,
-  gemId:      string,
+  gemId: string,
 ): Promise<boolean> {
   const moduleAddr = getModuleAddress();
   const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
 
   const result = await aptos.view({
     payload: {
-      function:          `${moduleAddr}::gem_event_store::gem_exists`,
-      typeArguments:     [],
+      function: `${moduleAddr}::gem_event_store::gem_exists`,
+      typeArguments: [],
       functionArguments: [storeOwner, gemIdBytes],
     },
   });

@@ -1,0 +1,64 @@
+
+# Dependencies
+node_modules/
+.env
+.DS_Store
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Logs
+logs
+*.log
+
+# OS generated files
+Thumbs.db
+Desktop.ini
+
+# TypeScript
+*.tsbuildinfo
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode/
+
+# Coverage
+coverage/
+
+# Misc
+*.tgz
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Ignore contract build artifacts
+contracts/**/build/
+contracts/**/dist/
+
+# Sensitive Data / Build Artifacts
+aptos.json
+plutus.json
+*.key
+*.pem
+secrets.json
+credentials.json
+mnemonic.txt
+*.seed
+keystore/
+.env.local
+.env.*.local
+.env.*
+putos.json

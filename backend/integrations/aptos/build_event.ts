@@ -1,4 +1,6 @@
+
 import { hashEventPayloadBytes, type EventPayload } from "./hash";
+
 
 // ---------------------------------------------------------------------------
 // Stage constants — mirrors event_record.move
