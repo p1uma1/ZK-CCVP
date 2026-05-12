@@ -67,6 +67,7 @@ putos.json
 *.skey
 *.seed
 *.mnemonic
+*.vkey
 
 # Generated addresses (optional)
 *.addr
