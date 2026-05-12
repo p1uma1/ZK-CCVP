@@ -62,3 +62,21 @@ keystore/
 .env.*.local
 .env.*
 putos.json
+
+# Cardano keys
+*.skey
+*.seed
+*.mnemonic
+
+# Generated addresses (optional)
+*.addr
+
+# Protocol / tx files
+*.draft
+*.signed
+*.raw
+*.tx
+
+# CBOR / plutus artifacts
+*.cbor
+*.plutus
