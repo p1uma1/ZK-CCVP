@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["ZK-CCVP Team"]
 
 [addresses]
-gem_trace       = "0x402167f872e7859cae6b9c13815ad829191567aed7f79f70780eba795384e4c3"
+gem_trace       = "0xcfac1b86838bf2186d081e4569cfac937a14a1e842c7c56497b3d9955724ef8e"
 aptos_framework = "0x1"
 std             = "0x1"
 aptos_std       = "0x1"
