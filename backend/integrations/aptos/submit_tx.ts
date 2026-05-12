@@ -1,4 +1,16 @@
+/**
+ * submit_tx.ts
+ *
+ * Submits gem_event_store transactions to Aptos.
+ * Reads network config from environment variables (via dotenv).
+ *
+ * Environment variables required (set in backend/.env):
+ *   APTOS_NETWORK        — DEVNET | TESTNET | MAINNET
+ *   APTOS_MODULE_ADDRESS — deployed package address
+ *   APTOS_PRIVATE_KEY    — deployer/actor private key
+ */
 
+/// 
 import "dotenv/config";
 import {
   Aptos,
@@ -18,6 +30,9 @@ import {
 } from "./build_event.js";
 import type { EventPayload } from "./hash.js";
 
+// ---------------------------------------------------------------------------
+// Config — read from environment
+// ---------------------------------------------------------------------------
 
 function getModuleAddress(): string {
   const addr = process.env.APTOS_MODULE_ADDRESS;
@@ -32,12 +47,18 @@ function getNetwork(): Network {
   return Network.DEVNET;
 }
 
-
+/**
+ * Creates an Aptos client from environment variables.
+ * Used by the Express server on startup.
+ */
 export function createClientFromEnv(): Aptos {
   return new Aptos(new AptosConfig({ network: getNetwork() }));
 }
 
-
+/**
+ * Creates an Account from the APTOS_PRIVATE_KEY env variable.
+ * Used when the backend needs to sign transactions (e.g. admin operations).
+ */
 export function createAccountFromEnv(): Account {
   const key = process.env.APTOS_PRIVATE_KEY;
   if (!key) throw new Error("APTOS_PRIVATE_KEY is not set in .env");
@@ -46,7 +67,20 @@ export function createAccountFromEnv(): Account {
   });
 }
 
+// ---------------------------------------------------------------------------
+// High-level entry point
+// ---------------------------------------------------------------------------
 
+/**
+ * Builds an EventPayload, hashes it, and submits a log_event transaction.
+ *
+ * Called by aptosEventService.ts for every supply chain event.
+ *
+ * Returns:
+ *   txHash      — Aptos transaction hash (pass as prevTxHashHex next time)
+ *   payload     — EventPayload object (upload to IPFS separately)
+ *   recordHash  — on-chain fingerprint (pass as prev_record_hash next time)
+ */
 export async function anchorGemEvent(
   aptos: Aptos,
   signer: Account,
@@ -63,6 +97,9 @@ export async function anchorGemEvent(
   return { txHash, payload };
 }
 
+// ---------------------------------------------------------------------------
+// Lower-level submit
+// ---------------------------------------------------------------------------
 
 export async function submitLogEvent(
   aptos: Aptos,
@@ -82,6 +119,7 @@ export async function submitLogEvent(
         params.stage,
         params.prevTxHash,
         params.payloadHash,
+        params.ipfsCid,
       ],
     },
   });
@@ -101,6 +139,9 @@ export async function submitLogEvent(
   return committed.hash;
 }
 
+// ---------------------------------------------------------------------------
+// Initialisation helpers (called once at deployment)
+// ---------------------------------------------------------------------------
 
 export async function initializeEventStore(
   aptos: Aptos,
@@ -164,6 +205,9 @@ export async function initializeActorRegistry(
   return committed.hash;
 }
 
+// ---------------------------------------------------------------------------
+// View helpers
+// ---------------------------------------------------------------------------
 
 export async function getEventCount(
   aptos: Aptos,
@@ -203,85 +247,68 @@ export async function gemExists(
   return result[0] as boolean;
 }
 
-export async function getLastRecordHash(
-  aptos: Aptos,
-  storeOwner: string,
-  gemId: string,
-): Promise<string> {
-  const moduleAddr = getModuleAddress();
-  const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
-
-  const result = await aptos.view({
-    payload: {
-      function: `${moduleAddr}::gem_event_store::get_last_record_hash`,
-      typeArguments: [],
-      functionArguments: [storeOwner, gemIdBytes],
-    },
-  });
-
-  const raw = result[0];
-
-  return normalizeBytesToHex(raw);
-}
-
-
-export async function getEventByIndex(
-  aptos: Aptos,
-  storeOwner: string,
-  gemId: string,
-  index: number,
-) {
-  const moduleAddr = getModuleAddress();
-  const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
-
-  const result = await aptos.view({
-    payload: {
-      function: `${moduleAddr}::gem_event_store::get_event`,
-      typeArguments: [],
-      functionArguments: [storeOwner, gemIdBytes, index],
-    },
-  });
-
-  return result[0];
-}
-
-
 function normalizeBytesToHex(value: unknown): string {
   if (typeof value === "string") {
-    return value.startsWith("0x") ? value : `0x${value}`;
+    return value.startsWith("0x") ? value.slice(2) : value;
   }
 
   if (value instanceof Uint8Array) {
-    return (
-      "0x" +
-      Array.from(value, (b) => b.toString(16).padStart(2, "0")).join("")
-    );
+    return Array.from(value, (b) => b.toString(16).padStart(2, "0")).join("");
   }
 
   if (Array.isArray(value)) {
-    return (
-      "0x" +
-      value.map((b) => Number(b).toString(16).padStart(2, "0")).join("")
-    );
+    return value.map((b) => Number(b).toString(16).padStart(2, "0")).join("");
   }
 
   if (value && typeof value === "object") {
     const obj = value as Record<string, unknown>;
 
     if ("vec" in obj && Array.isArray(obj.vec)) {
-      return (
-        "0x" +
-        obj.vec.map((b) => Number(b).toString(16).padStart(2, "0")).join("")
-      );
+      return obj.vec.map((b) => Number(b).toString(16).padStart(2, "0")).join("");
     }
 
     const values = Object.values(obj);
-    return (
-      "0x" +
-      values.map((b) => Number(b).toString(16).padStart(2, "0")).join("")
-    );
+    return values.map((b) => Number(b).toString(16).padStart(2, "0")).join("");
   }
 
   throw new Error(`Unsupported lastRecordHash format: ${JSON.stringify(value)}`);
 }
 
+export async function getLastRecordHash(
+  aptos:      Aptos,
+  storeOwner: string,
+  gemId:      string,
+): Promise<string> {
+  const moduleAddr = getModuleAddress();
+  const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
+
+  const result = await aptos.view({
+    payload: {
+      function:          `${moduleAddr}::gem_event_store::get_last_record_hash`,
+      typeArguments:     [],
+      functionArguments: [storeOwner, gemIdBytes],
+    },
+  });
+
+  return normalizeBytesToHex(result[0]);
+}
+
+export async function getEventByIndex(
+  aptos:      Aptos,
+  storeOwner: string,
+  gemId:      string,
+  index:      number,
+): Promise<unknown> {
+  const moduleAddr = getModuleAddress();
+  const gemIdBytes = Array.from(new TextEncoder().encode(gemId));
+
+  const result = await aptos.view({
+    payload: {
+      function:          `${moduleAddr}::gem_event_store::get_event`,
+      typeArguments:     [],
+      functionArguments: [storeOwner, gemIdBytes, index],
+    },
+  });
+
+  return result[0];
+}

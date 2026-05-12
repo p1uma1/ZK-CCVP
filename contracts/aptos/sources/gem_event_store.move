@@ -39,6 +39,7 @@ module gem_trace::gem_event_store {
         timestamp_ms:    u64,
         sequence_number: u64,
         payload_hash:    vector<u8>,
+        ipfs_cid:        vector<u8>,
         record_hash:     vector<u8>,  // fingerprint of this record
     }
 
@@ -75,6 +76,7 @@ module gem_trace::gem_event_store {
         stage:           u8,
         sequence_number: u64,
         payload_hash:    &vector<u8>,
+        ipfs_cid:        &vector<u8>,
     ): vector<u8> {
         let buf = vector::empty<u8>();
 
@@ -95,6 +97,7 @@ module gem_trace::gem_event_store {
 
         // payload_hash bytes
         vector::append(&mut buf, *payload_hash);
+        vector::append(&mut buf, *ipfs_cid);
 
         hash::sha2_256(buf)
     }
@@ -121,7 +124,8 @@ module gem_trace::gem_event_store {
         stage:            u8,
         prev_record_hash: vector<u8>,
         payload_hash:     vector<u8>,
-    ) acquires GemEventStore {
+        ipfs_cid:         vector<u8>,
+    )acquires GemEventStore {
         // 1. Store must exist
         assert!(exists<GemEventStore>(store_owner), E_NOT_INITIALIZED);
 
@@ -172,16 +176,17 @@ module gem_trace::gem_event_store {
             now_ms,
             prev_record_hash,
             payload_hash,
+            ipfs_cid,
             sequence_number,
         );
-
         // Compute fingerprint for THIS record — next caller will need it
         let record_hash = compute_record_hash(
-            &gem_id,
-            stage,
-            sequence_number,
-            &payload_hash,
-        );
+                &gem_id,
+                stage,
+                sequence_number,
+                &payload_hash,
+                &ipfs_cid,
+            );
 
         // Append record and update fingerprint
         let history_mut = smart_table::borrow_mut(&mut store.histories, gem_id);
@@ -198,6 +203,7 @@ module gem_trace::gem_event_store {
             timestamp_ms:    now_ms,
             sequence_number,
             payload_hash,
+            ipfs_cid,
             record_hash:     history_mut.last_record_hash,
         });
     }
@@ -264,6 +270,15 @@ module gem_trace::gem_event_store {
     #[test_only]
     use aptos_framework::account;
 
+    #[test_only]
+const CID_MINING: vector<u8>        = b"bafkrei-mining-demo";
+#[test_only]
+const CID_CUTTING: vector<u8>       = b"bafkrei-cutting-demo";
+#[test_only]
+const CID_CERTIFICATION: vector<u8> = b"bafkrei-certification-demo";
+#[test_only]
+const CID_SALE: vector<u8>          = b"bafkrei-sale-demo";
+
     // Helper: sets up store + registry + grants actor all stages
     #[test_only]
     fun setup_full(admin: &signer, framework: &signer) {
@@ -283,7 +298,7 @@ module gem_trace::gem_event_store {
         let addr    = signer::address_of(&admin);
         let payload = x"9f1c2e6b7d3a4b8f0123456789abcdef0123456789abcdef0123456789abcdef";
 
-        log_event(&admin, addr, b"GEM-LK-2024-00147", 1, vector::empty<u8>(), payload);
+        log_event(&admin, addr, b"GEM-LK-2024-00147", 1, vector::empty<u8>(), payload, CID_MINING);
 
         assert!(gem_exists(addr, b"GEM-LK-2024-00147"), 1);
         assert!(event_count(addr, b"GEM-LK-2024-00147") == 1, 2);
@@ -303,13 +318,13 @@ module gem_trace::gem_event_store {
         let p2   = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
         // Log mining
-        log_event(&admin, addr, b"GEM-LK-2024-00500", 1, vector::empty<u8>(), p1);
+        log_event(&admin, addr, b"GEM-LK-2024-00500", 1, vector::empty<u8>(), p1, CID_MINING);
 
         // Get the record hash the module computed
         let correct_hash = get_last_record_hash(addr, b"GEM-LK-2024-00500");
 
         // Log cutting using the correct hash — must succeed
-        log_event(&admin, addr, b"GEM-LK-2024-00500", 2, correct_hash, p2);
+        log_event(&admin, addr, b"GEM-LK-2024-00500", 2, correct_hash, p2, CID_CUTTING);
         assert!(event_count(addr, b"GEM-LK-2024-00500") == 2, 10);
     }
 
@@ -324,10 +339,10 @@ module gem_trace::gem_event_store {
         let p2   = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         let fake = x"deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
 
-        log_event(&admin, addr, b"GEM-LK-2024-00600", 1, vector::empty<u8>(), p1);
+        log_event(&admin, addr, b"GEM-LK-2024-00600", 1, vector::empty<u8>(), p1, CID_MINING);
 
         // Supply a fabricated prev hash — must abort
-        log_event(&admin, addr, b"GEM-LK-2024-00600", 2, fake, p2);
+        log_event(&admin, addr, b"GEM-LK-2024-00600", 2, fake, p2, CID_CUTTING);
     }
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
@@ -345,7 +360,7 @@ module gem_trace::gem_event_store {
         let payload = x"9f1c2e6b7d3a4b8f0123456789abcdef0123456789abcdef0123456789abcdef";
 
         // Must abort — admin has no permissions
-        log_event(&admin, addr, b"GEM-LK-2024-00700", 1, vector::empty<u8>(), payload);
+        log_event(&admin, addr, b"GEM-LK-2024-00700", 1, vector::empty<u8>(), payload, CID_MINING);
     }
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
@@ -367,7 +382,7 @@ module gem_trace::gem_event_store {
         setup_full(&admin, &framework);
         let addr    = signer::address_of(&admin);
         let payload = x"9f1c2e6b7d3a4b8f0123456789abcdef0123456789abcdef0123456789abcdef";
-        log_event(&admin, addr, b"GEM-LK-2024-00800", 2, vector::empty<u8>(), payload);
+        log_event(&admin, addr, b"GEM-LK-2024-00800", 2, vector::empty<u8>(), payload, CID_CUTTING);
     }
 
     #[test(admin = @gem_trace, framework = @aptos_framework)]
@@ -380,9 +395,9 @@ module gem_trace::gem_event_store {
         let p1   = x"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         let p2   = x"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
-        log_event(&admin, addr, b"GEM-LK-2024-00900", 1, vector::empty<u8>(), p1);
+        log_event(&admin, addr, b"GEM-LK-2024-00900", 1, vector::empty<u8>(), p1, CID_MINING);
         let h = get_last_record_hash(addr, b"GEM-LK-2024-00900");
         // Mining → Sale is invalid
-        log_event(&admin, addr, b"GEM-LK-2024-00900", 7, h, p2);
+        log_event(&admin, addr, b"GEM-LK-2024-00900", 7, h, p2, CID_SALE);
     }
 }

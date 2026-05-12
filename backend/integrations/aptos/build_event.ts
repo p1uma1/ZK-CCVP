@@ -1,23 +1,6 @@
-/**
- * build_event.ts
- *
- * Builds the parameter object for a gem_event_store::log_event transaction.
- *
- * Mirrors backend/integrations/cardano/build_datum.ts — that file constructs
- * a CertificateDatum for a Cardano transaction; this file constructs the
- * equivalent argument bundle for an Aptos Move entry function call.
- *
- * The output of buildLogEventParams() is passed directly to
- * submitLogEvent() in submit_tx.ts, which encodes it for the Aptos SDK.
- *
- * Stage constants
- * ---------------
- * These must stay in sync with the u8 constants in event_record.move.
- * They are exported so the DApp frontend can use them for validation and
- * display without importing the Move source.
- */
 
-import { hashEventPayloadBytes, type EventPayload } from "./hash.js";
+import { hashEventPayloadBytes, type EventPayload } from "./hash";
+
 
 // ---------------------------------------------------------------------------
 // Stage constants — mirrors event_record.move
@@ -50,92 +33,27 @@ export const STAGE_LABEL: Record<StageValue, string> = {
 // Types
 // ---------------------------------------------------------------------------
 
-/**
- * The complete parameter bundle for a gem_event_store::log_event call.
- *
- * All fields map 1-to-1 to the entry function signature in Move:
- *
- *   public entry fun log_event(
- *     actor:        &signer,      ← provided by the wallet, not here
- *     store_owner:  address,
- *     gem_id:       vector<u8>,
- *     stage:        u8,
- *     prev_tx_hash: vector<u8>,
- *     payload_hash: vector<u8>,
- *   )
- */
+
 export interface LogEventParams {
-  /** Address of the account that owns the GemEventStore resource. */
   storeOwner: string;
-
-  /**
-   * UTF-8 encoded gem identifier bytes.
-   * Must match the gem_id used on Cardano (CertificateDatum.gem_id) and
-   * Ethereum (ERC-721 token metadata) so all three chains reference the
-   * same physical stone.
-   */
   gemId: Uint8Array;
-
-  /**
-   * Supply chain stage — one of the STAGE constants above (1–7).
-   * Validated by the Move module; an out-of-range value will abort the tx.
-   */
   stage: StageValue;
-
-  /**
-   * SHA-256 hash (32 bytes) of the previous Aptos transaction for this gem.
-   * Pass an empty Uint8Array (length 0) for the genesis (MINING) event.
-   */
   prevTxHash: Uint8Array;
-
-  /**
-   * SHA-256 hash (32 bytes) of the canonical off-chain event payload stored
-   * on IPFS. Produced by hashEventPayloadBytes() in hash.ts.
-   */
   payloadHash: Uint8Array;
+  ipfsCid: Uint8Array;
 }
 
-/**
- * Input provided by the caller (DApp backend or CLI script) before the
- * payload hash is computed. buildLogEventParams() derives LogEventParams
- * from this.
- */
+
 export interface LogEventInput {
-  /** Address of the GemEventStore owner (the deployer account). */
   storeOwner: string;
-
-  /** Gem identifier string — will be UTF-8 encoded into bytes. */
   gemId: string;
-
-  /** Stage value — use the STAGE constants. */
   stage: StageValue;
-
-  /**
-   * Previous Aptos transaction hash as a hex string (64 chars = 32 bytes).
-   * Pass an empty string "" for the genesis (MINING) event.
-   */
   prevTxHashHex: string;
-
-  /**
-   * Free-form metadata to include in the off-chain IPFS payload.
-   * Examples:
-   *   Mining:        { location: "Ratnapura, LK", mine_license: "ML-2024-447" }
-   *   Certification: { lab: "GIC", report_id: "GIC-2024-88321" }
-   *   Sale:          { ethereum_token_id: "42" }
-   */
   metadata: Record<string, unknown>;
-
-  /**
-   * Sequence number of this event (0-indexed, per gem).
-   * The caller is responsible for providing the correct value; the on-chain
-   * module enforces ordering independently.
-   */
   sequenceNumber: number;
-
-  /** Actor's Aptos account address (hex string, for the payload record). */
+timestampMs?: number;
   actorAddress: string;
-
-  /** IPFS CIDs of supporting documents or photos (optional). */
+ipfsCid: string;
   attachments?: string[];
 }
 
@@ -187,7 +105,7 @@ export function buildLogEventParams(input: LogEventInput): {
     gem_id:          input.gemId,
     stage:           STAGE_LABEL[input.stage],
     actor_address:   input.actorAddress,
-    timestamp_ms:    Date.now(),
+    timestamp_ms:     input.timestampMs ?? Date.now(),
     sequence_number: input.sequenceNumber,
     metadata:        input.metadata,
     ...(input.attachments && { attachments: input.attachments }),
@@ -198,6 +116,8 @@ export function buildLogEventParams(input: LogEventInput): {
 
   // 3. Encode gem_id as UTF-8 bytes
   const gemId = new TextEncoder().encode(input.gemId);
+
+  const ipfsCid = new TextEncoder().encode(input.ipfsCid);
 
   // 4. Decode prevTxHash from hex (empty = genesis)
   const prevTxHash = input.prevTxHashHex.length === 0
@@ -210,6 +130,7 @@ export function buildLogEventParams(input: LogEventInput): {
     stage:      input.stage,
     prevTxHash,
     payloadHash,
+    ipfsCid,
   };
 
   // Return both so the caller can upload payload to IPFS before submitting

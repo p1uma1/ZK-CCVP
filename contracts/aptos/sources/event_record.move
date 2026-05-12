@@ -92,14 +92,15 @@ module gem_trace::event_record {
     ///                 Allows consumers to detect gaps or reordering without
     ///                 traversing the full prev_tx_hash chain.
     struct EventRecord has copy, drop, store {
-        gem_id:          vector<u8>,
-        stage:           u8,
-        actor_address:   address,
-        timestamp_ms:    u64,
-        prev_tx_hash:    vector<u8>,   // 32 bytes or empty for genesis event
-        payload_hash:    vector<u8>,   // always exactly 32 bytes (SHA-256)
-        sequence_number: u64,
-    }
+    gem_id:          vector<u8>,
+    stage:           u8,
+    actor_address:   address,
+    timestamp_ms:    u64,
+    prev_tx_hash:    vector<u8>,
+    payload_hash:    vector<u8>,
+    ipfs_cid:        vector<u8>,
+    sequence_number: u64,
+}
 
     // -------------------------------------------------------------------------
     // Constructor with validation
@@ -119,6 +120,7 @@ module gem_trace::event_record {
         timestamp_ms:    u64,
         prev_tx_hash:    vector<u8>,
         payload_hash:    vector<u8>,
+        ipfs_cid:        vector<u8>,
         sequence_number: u64,
     ): EventRecord {
         // gem_id must not be empty
@@ -142,6 +144,7 @@ module gem_trace::event_record {
             prev_tx_hash,
             payload_hash,
             sequence_number,
+            ipfs_cid,
         }
     }
 
@@ -156,6 +159,7 @@ module gem_trace::event_record {
     public fun prev_tx_hash(r: &EventRecord): &vector<u8> { &r.prev_tx_hash }
     public fun payload_hash(r: &EventRecord): &vector<u8> { &r.payload_hash }
     public fun sequence_number(r: &EventRecord): u64  { r.sequence_number }
+    public fun ipfs_cid(r: &EventRecord): &vector<u8> { &r.ipfs_cid }
 
     // -------------------------------------------------------------------------
     // Stage helpers
@@ -197,7 +201,8 @@ module gem_trace::event_record {
             1712700000000,              // timestamp_ms  (Unix ms)
             vector::empty<u8>(),        // prev_tx_hash  — empty = genesis
             payload_hash,               // payload_hash  — 32 bytes
-            0,                          // sequence_number — starts at 0
+            b"bafkreidemoexamplecid0001",
+            0
         );
 
         assert!(stage(&record) == STAGE_MINING, 100);
@@ -225,7 +230,8 @@ module gem_trace::event_record {
             1712800000000,
             prev_tx,                    // 32-byte hash of cutting tx
             payload,
-            2,
+            b"bafkreidemoexamplecid0001",
+            2
         );
 
         assert!(stage(&record) == STAGE_CERTIFICATION, 200);
@@ -253,7 +259,8 @@ module gem_trace::event_record {
             1713200000000,
             prev_tx,
             payload,
-            6,                          // 7th event in lifecycle (0-indexed)
+            b"bafkreidemoexamplecid0001",
+            6                    // 7th event in lifecycle (0-indexed)
         );
 
         assert!(stage(&record) == STAGE_SALE, 300);
@@ -271,7 +278,8 @@ module gem_trace::event_record {
             1712700000000,
             vector::empty<u8>(),
             payload,
-            0,
+            b"bafkreidemoexamplecid0001",
+            0
         );
     }
 
@@ -285,7 +293,8 @@ module gem_trace::event_record {
             1712700000000,
             vector::empty<u8>(),
             x"deadbeef",               // Only 4 bytes — must abort
-            0,
+            b"bafkreidemoexamplecid0001",
+            0
         );
     }
 
@@ -300,7 +309,8 @@ module gem_trace::event_record {
             1712700000000,
             x"aabbcc",                 // 3 bytes — neither empty nor 32 — must abort
             payload,
-            1,
+            b"bafkreidemoexamplecid0001",
+            1
         );
     }
 }
