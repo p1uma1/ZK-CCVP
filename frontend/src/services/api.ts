@@ -33,3 +33,65 @@ export const certificateService = {
     }
   }
 };
+
+export const registryService = {
+  async createUpdateTx(action: 'Add' | 'Remove', issuerPkh: string, userAddress: string): Promise<ApiResponse<CreateTxResponse>> {
+    try {
+      const response = await axios.post(`${BACKEND_URL}/api/registry/create`, {
+        action,
+        issuerPkh,
+        userAddress,
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Failed to create registry transaction',
+      };
+    }
+  },
+
+  async submitTransaction(signedTx: string): Promise<ApiResponse<SubmitTxResponse>> {
+    try {
+      const response = await axios.post(`${BACKEND_URL}/api/registry/submit`, {
+        signedTx,
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Failed to submit registry transaction',
+      };
+    }
+  }
+};
+
+export const utilsService = {
+  async getAddressPkh(address: string): Promise<ApiResponse<{ pkh: string }>> {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/api/utils/pkh`, {
+        params: { address },
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Failed to fetch PKH from address',
+      };
+    }
+  },
+
+  async convertHexAddress(hex: string): Promise<ApiResponse<{ address: string }>> {
+    try {
+      const response = await axios.get(`${BACKEND_URL}/api/utils/address`, {
+        params: { hex },
+      });
+      return response.data;
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message || 'Failed to convert hex address',
+      };
+    }
+  }
+};

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useCardano } from './hooks/useCardano';
-import { Data, fromText, Constr, paymentCredentialOf, fromHex } from 'lucid-cardano';
-import { CARDANO_CONFIG, getCertificatePolicyScript } from './config/cardano';
+import { certificateService, utilsService } from './services/api';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { CertificateForm } from './components/CertificateForm';
@@ -11,7 +10,6 @@ import './index.css';
 
 function App() {
   const {
-    lucid,
     address,
     availableWallets,
     selectedWallet,
@@ -19,7 +17,8 @@ function App() {
     status,
     setStatus,
     connectWallet,
-    disconnectWallet
+    disconnectWallet,
+    signTx
   } = useCardano();
 
   const [activeTab, setActiveTab] = useState<'issuer' | 'admin'>('issuer');
@@ -36,12 +35,11 @@ function App() {
   // Autofill issuer PKH when address changes
   useEffect(() => {
     if (address) {
-      try {
-        const pkh = paymentCredentialOf(address).hash;
-        setFormData(prev => ({ ...prev, issuerPkh: pkh }));
-      } catch (e) {
-        console.error("Error extracting PKH from address", e);
-      }
+      utilsService.getAddressPkh(address).then(res => {
+        if (res.success && res.data?.pkh) {
+          setFormData(prev => ({ ...prev, issuerPkh: res.data.pkh }));
+        }
+      });
     }
   }, [address]);
 
@@ -50,53 +48,37 @@ function App() {
       setStatus({ type: 'error', msg: 'Connect your wallet before registering.' });
       return;
     }
-    if (!lucid) {
-      setStatus({ type: 'error', msg: 'Lucid is still initializing. Please wait.' });
-      return;
-    }
+
 
     setLoading(true);
     setStatus(null);
 
     try {
-      setStatus({ type: 'info', msg: '(1/3) Preparing transaction data…' });
+      setStatus({ type: 'info', msg: '(1/3) Requesting transaction from backend…' });
 
-      // 1. Get current Registry UTXO for reference input
-      const [registryUtxo] = await lucid.utxosAt(CARDANO_CONFIG.REGISTRY_ADDRESS);
-      if (!registryUtxo) throw new Error('Registry UTXO not found on-chain.');
+      // 1. Get Unsigned Transaction from Backend
+      const createRes = await certificateService.createCertificate(formData, address);
 
-      // 2. Prepare Datum
-      const datum = Data.to(new Constr(0, [
-        fromText(formData.issuerId),
-        fromText(formData.reportId),
-        BigInt(formData.reportType),
-        fromText(formData.gemId),
-        fromText(formData.issuerPkh),
-        BigInt(Date.now()),
-        1n,
-        fromText(formData.ipfsLink.replace('ipfs://', '')),
-        formData.issuerPkh,
-      ]));
-      const assetName = fromText(formData.gemId);
-      const unit = CARDANO_CONFIG.CERTIFICATE_POLICY_ID + assetName;
+      if (!createRes.success || !createRes.data?.unsignedTx) {
+        throw new Error(createRes.error || 'Failed to generate unsigned transaction');
+      }
 
-      // 3. Build Transaction
+      // 2. Sign Transaction Locally
       setStatus({ type: 'info', msg: `(2/3) Awaiting signature for ${formData.gemId}…` });
 
-      const tx = await (lucid as any)
-        .newTx()
-        .readFrom([registryUtxo]) // Reference input
-        .mintAssets({ [unit]: 1n }, Data.to(formData.issuerPkh)) // Mint 1 token with issuer PKH as redeemer
-        .attachMintingPolicy(getCertificatePolicyScript())
-        .payToContract(
-          CARDANO_CONFIG.CERTIFICATE_ADDRESS,
-          { inline: datum },
-          { [unit]: 1n, lovelace: 2_000_000n } // Store the NFT at the certificate storage address
-        )
-        .complete();
+      const { unsignedTx } = createRes.data;
+      const signedData = await signTx(unsignedTx);
 
-      const signedTx = await tx.sign().complete();
-      const txHash = await signedTx.submit();
+      // 3. Submit Signed Transaction via Backend
+      setStatus({ type: 'info', msg: '(3/3) Submitting signed transaction…' });
+
+      const submitRes = await certificateService.submitTransaction(signedData);
+
+      if (!submitRes.success || !submitRes.data?.txHash) {
+        throw new Error(submitRes.error || 'Failed to submit transaction');
+      }
+
+      const txHash = submitRes.data.txHash;
 
       setStatus({
         type: 'success',
@@ -153,9 +135,9 @@ function App() {
               />
             ) : (
               <AdminPortal
-                lucid={lucid}
                 address={address}
                 setStatus={setStatus}
+                signTx={signTx}
               />
             )}
           </div>

@@ -22,7 +22,7 @@ export const NetworkInfo: React.FC = () => {
       <div className="info-row">
         <ChevronRight size={14} className="info-row-icon" />
         <span className="info-row-label">Smart Contract</span>
-        <span className="info-row-value">PlutusV2</span>
+        <span className="info-row-value">PlutusV3</span>
       </div>
       <div className="info-row">
         <ChevronRight size={14} className="info-row-icon" />

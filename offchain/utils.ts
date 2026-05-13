@@ -8,11 +8,11 @@ export const RegistryDatum = Data.Object({
 
 export type RegistryDatumType = Data.Static<typeof RegistryDatum>;
 
-export const RegistryRedeemer = Data.Enum({
-    AddIssuer: Data.Object({ pkh: Data.Bytes() }),
-    RemoveIssuer: Data.Object({ pkh: Data.Bytes() }),
-    RotateAdmin: Data.Object({ new_admin: Data.Bytes() }),
-});
+export const RegistryRedeemer = Data.Enum([
+    Data.Object({ AddIssuer: Data.Object({ pkh: Data.Bytes() }) }),
+    Data.Object({ RemoveIssuer: Data.Object({ pkh: Data.Bytes() }) }),
+    Data.Object({ RotateAdmin: Data.Object({ new_admin: Data.Bytes() }) }),
+]);
 
 export type RegistryRedeemerType = Data.Static<typeof RegistryRedeemer>;
 

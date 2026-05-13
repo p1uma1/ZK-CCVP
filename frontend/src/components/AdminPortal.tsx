@@ -1,21 +1,20 @@
 import React, { useState } from 'react';
-import { Constr, Data } from 'lucid-cardano';
-import type { Lucid } from 'lucid-cardano';
-import { CARDANO_CONFIG } from '../config/cardano';
+
+import { registryService } from '../services/api';
 import { ShieldCheck, UserPlus, UserMinus, Activity, ArrowRight } from 'lucide-react';
 
 interface AdminPortalProps {
-  lucid: Lucid | null;
   address: string;
   setStatus: (status: { type: 'success' | 'error' | 'info'; msg: string } | null) => void;
+  signTx: (cbor: string) => Promise<string>;
 }
 
-export const AdminPortal: React.FC<AdminPortalProps> = ({ lucid, address, setStatus }) => {
+export const AdminPortal: React.FC<AdminPortalProps> = ({ address, setStatus, signTx }) => {
   const [issuerPkh, setIssuerPkh] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegistryAction = async (action: 'Add' | 'Remove') => {
-    if (!lucid || !address) {
+    if (!address) {
       setStatus({ type: 'error', msg: 'Connect your admin wallet first.' });
       return;
     }
@@ -29,59 +28,31 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ lucid, address, setSta
     setStatus({ type: 'info', msg: `Building ${action}Issuer transaction...` });
 
     try {
-      // 1. Get current Registry UTXO
-      const [registryUtxo] = await lucid.utxosAt(CARDANO_CONFIG.REGISTRY_ADDRESS);
-      if (!registryUtxo) throw new Error('Registry UTXO not found on-chain.');
+      setStatus({ type: 'info', msg: `(1/3) Requesting ${action} transaction from backend…` });
 
-      // 2. Decode the inline datum
-      // lucid-cardano stores inline datums in utxo.datum as CBOR hex
-      const rawCbor = registryUtxo.datum ?? (registryUtxo as any).inlineDatum;
-      if (!rawCbor) throw new Error('Registry UTXO is missing an inline datum.');
-
-      const parsed = Data.from(rawCbor);
-      // RegistryDatum is Constr(0, [admin: ByteArray, issuers: List<ByteArray>, version: Int])
-      if (!(parsed instanceof Constr)) {
-        throw new Error('Unexpected datum format from Registry UTXO.');
+      // 1. Get Unsigned Transaction from Backend
+      const createRes = await registryService.createUpdateTx(action, issuerPkh, address);
+      
+      if (!createRes.success || !createRes.data?.unsignedTx) {
+        throw new Error(createRes.error || 'Failed to generate registry transaction');
       }
 
-      const currentAdmin = parsed.fields[0] as string;
-      const currentIssuers = (parsed.fields[1] as string[]).map(s => s.toLowerCase());
-      const currentVersion = parsed.fields[2] as bigint;
-      const normalizedPkh = issuerPkh.toLowerCase();
+      // 2. Sign Transaction Locally
+      setStatus({ type: 'info', msg: `(2/3) Awaiting signature for Registry update…` });
+      
+      const { unsignedTx } = createRes.data;
+      const signedData = await signTx(unsignedTx);
 
-      let newIssuers = [...currentIssuers];
-
-      if (action === 'Add') {
-        if (newIssuers.includes(normalizedPkh)) throw new Error('Issuer already authorized.');
-        newIssuers.push(normalizedPkh);
-      } else {
-        if (!newIssuers.includes(normalizedPkh)) throw new Error('Issuer not found in registry.');
-        newIssuers = newIssuers.filter(p => p !== normalizedPkh);
+      // 3. Submit Signed Transaction via Backend
+      setStatus({ type: 'info', msg: '(3/3) Submitting registry update…' });
+      
+      const submitRes = await registryService.submitTransaction(signedData);
+      
+      if (!submitRes.success || !submitRes.data?.txHash) {
+        throw new Error(submitRes.error || 'Failed to submit registry update');
       }
 
-      const nextDatum = Data.to(new Constr(0, [
-        currentAdmin,
-        newIssuers,
-        currentVersion + 1n,
-      ]));
-
-      const redeemer = action === 'Add'
-        ? Data.to(new Constr(0, [normalizedPkh]))  // AddIssuer { pkh }
-        : Data.to(new Constr(1, [normalizedPkh])); // RemoveIssuer { pkh }
-      console.log("Script: ", CARDANO_CONFIG.REGISTRY_SCRIPT)
-      const tx = await lucid
-        .newTx()
-        .collectFrom([registryUtxo], redeemer)
-        .attachSpendingValidator(CARDANO_CONFIG.REGISTRY_SCRIPT)
-        .payToContract(
-          CARDANO_CONFIG.REGISTRY_ADDRESS,
-          { inline: nextDatum },
-          { lovelace: 3_000_000n }
-        )
-        .complete();
-
-      const signedTx = await tx.sign().complete();
-      const txHash = await signedTx.submit();
+      const txHash = submitRes.data.txHash;
 
       setStatus({ type: 'success', msg: `Registry updated! Tx: ${txHash.slice(0, 15)}...` });
       setIssuerPkh('');

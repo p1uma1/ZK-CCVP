@@ -1,7 +1,7 @@
 name = "zk-ccvp/cardano"
 version = "0.0.0"
 compiler = "v1.1.21"
-plutus = "v2"
+plutus = "v3"
 license = "Apache-2.0"
 description = "Aiken contracts for project 'zk-ccvp/cardano'"
 
