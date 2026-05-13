@@ -32,22 +32,24 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({ address, setStatus, si
 
       // 1. Get Unsigned Transaction from Backend
       const createRes = await registryService.createUpdateTx(action, issuerPkh, address);
-      
+
       if (!createRes.success || !createRes.data?.unsignedTx) {
         throw new Error(createRes.error || 'Failed to generate registry transaction');
       }
 
       // 2. Sign Transaction Locally
       setStatus({ type: 'info', msg: `(2/3) Awaiting signature for Registry update…` });
-      
+
       const { unsignedTx } = createRes.data;
       const signedData = await signTx(unsignedTx);
 
+
+
       // 3. Submit Signed Transaction via Backend
       setStatus({ type: 'info', msg: '(3/3) Submitting registry update…' });
-      
+
       const submitRes = await registryService.submitTransaction(signedData);
-      
+
       if (!submitRes.success || !submitRes.data?.txHash) {
         throw new Error(submitRes.error || 'Failed to submit registry update');
       }

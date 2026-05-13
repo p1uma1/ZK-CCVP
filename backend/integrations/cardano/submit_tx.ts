@@ -201,7 +201,8 @@ export async function buildUnsignedRegistryUpdateTx(
 
   if (action === "Add") {
     if (newIssuers.includes(normalizedPkh)) throw new Error("Issuer already authorized.");
-    newIssuers.push(normalizedPkh);
+    // Prepend to match Aiken's list.push behavior ([new, ...old])
+    newIssuers = [normalizedPkh, ...newIssuers];
   } else {
     if (!newIssuers.includes(normalizedPkh)) throw new Error("Issuer not found in registry.");
     newIssuers = newIssuers.filter((p) => p !== normalizedPkh);
@@ -233,29 +234,54 @@ export async function buildUnsignedRegistryUpdateTx(
   if (walletUtxos.length === 0) throw new Error("Wallet has no UTxOs — fund it from the faucet.");
   lucid.selectWallet.fromAddress(bech32Address, walletUtxos);
 
-  // 7. Build unsigned TX — let Lucid auto-select collateral (no setCollateral override)
+  // 7. Build unsigned TX
   const tx = await lucid
     .newTx()
     .collectFrom([registryUtxo], redeemer)
     .attach.SpendingValidator(registryScript)
-    .addSignerKey(current.admin)
+    .addSignerKey(current.admin) // We must sign for the PKH stored in the registry
     .pay.ToContract(
       REGISTRY_ADDRESS,
       { kind: "inline", value: encodedNextDatum },
       { lovelace: 3000000n }
     )
-    .complete({ localUPLCEval: false });
-
-  return tx.toString();
+    .validTo(Math.floor(Date.now() + 1000 * 60 * 15)) // 15 minutes validity
+    .complete({
+      localUPLCEval: false,
+      setCollateral: 5_000_000n,
+    });
+  console.log("tx type:", typeof tx);
+  console.log("tx keys:", Object.keys(tx as any));
+  return tx.toCBOR();
 }
 
 // ── Submit ────────────────────────────────────────────────────────────────────
 /**
  * Submits an already-signed transaction CBOR to the Cardano network.
  */
-export async function submitSignedTx(signedTxCbor: string): Promise<string> {
+/**
+ * Submits a transaction to the Cardano network.
+ * Supports either a full signed transaction CBOR string, or an object containing
+ * the unsigned transaction body and the wallet's witness set.
+ */
+export async function submitSignedTx(
+  payload: string | { unsignedTxHex: string; signedWitnessSet: string }
+): Promise<string> {
   const lucid = await initLucid();
-  return await lucid.config().provider!.submitTx(signedTxCbor);
+  // Select a dummy wallet to satisfy Lucid's internal checks for complete/submit
+  lucid.selectWallet.fromAddress(REGISTRY_ADDRESS, []);
+
+  if (typeof payload === "string") {
+    return await lucid.config().provider!.submitTx(payload);
+  }
+
+  // Assemble multi-part signature
+  const txBuilder = lucid.fromTx(payload.unsignedTxHex);
+  const signedTx = await txBuilder.assemble([payload.signedWitnessSet]).complete();
+  const signedTxCbor = signedTx.toCBOR();
+
+  console.log("[submitSignedTx] Final CBOR length:", signedTxCbor.length);
+  return await signedTx.submit();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

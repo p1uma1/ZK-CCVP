@@ -19,16 +19,14 @@ export const certificateService = {
     }
   },
 
-  async submitTransaction(signedTx: string): Promise<ApiResponse<SubmitTxResponse>> {
+  async submitTransaction(payload: { unsignedTxHex: string; signedWitnessSet: string }): Promise<ApiResponse<SubmitTxResponse>> {
     try {
-      const response = await axios.post(`${BACKEND_URL}/api/certificates/submit`, {
-        signedTx,
-      });
+      const response = await axios.post(`${BACKEND_URL}/api/certificates/submit`, payload);
       return response.data;
     } catch (error: any) {
       return {
         success: false,
-        error: error.response?.data?.error || error.message || 'Failed to submit transaction',
+        error: error.response?.data?.error || error.message || 'Failed to submit certificate transaction',
       };
     }
   }
@@ -51,11 +49,9 @@ export const registryService = {
     }
   },
 
-  async submitTransaction(signedTx: string): Promise<ApiResponse<SubmitTxResponse>> {
+  async submitTransaction(payload: { unsignedTxHex: string; signedWitnessSet: string }): Promise<ApiResponse<SubmitTxResponse>> {
     try {
-      const response = await axios.post(`${BACKEND_URL}/api/registry/submit`, {
-        signedTx,
-      });
+      const response = await axios.post(`${BACKEND_URL}/api/registry/submit`, payload);
       return response.data;
     } catch (error: any) {
       return {

@@ -5,16 +5,16 @@ import type { CanonicalCertificate } from "../../integrations/cardano/canonicali
 
 export async function createCertificate(req: Request, res: Response): Promise<void> {
   try {
-    const { 
-      gemId, 
-      issuerId, 
+    const {
+      gemId,
+      issuerId,
       issuerPkh,
       userAddress,
-      reportId, 
-      reportType, 
-      ipfsLink, 
+      reportId,
+      reportType,
+      ipfsLink,
       gemData,
-      images 
+      images
     } = req.body;
 
     // Validate required fields
@@ -57,10 +57,10 @@ export async function createCertificate(req: Request, res: Response): Promise<vo
 
     // 2. Use Cardano integration to build the UNSIGNED transaction
     // reportTypeInt matches the on-chain definition (e.g., 1 for Standard)
-    const reportTypeInt = typeof reportType === "number" ? reportType : 1; 
+    const reportTypeInt = typeof reportType === "number" ? reportType : 1;
 
     console.log(`[certificateController] Building unsigned transaction for Gem ID: ${gemId}`);
-    
+
     const unsignedTx = await buildUnsignedAnchorTx(canonicalCert, reportTypeInt, userAddress);
 
     // 3. Return success with the unsigned transaction hex (CBOR)
@@ -89,15 +89,19 @@ export async function createCertificate(req: Request, res: Response): Promise<vo
  */
 export async function submitCertificate(req: Request, res: Response): Promise<void> {
   try {
-    const { signedTx } = req.body;
+    const { unsignedTxHex, signedWitnessSet } = req.body;
 
-    if (!signedTx || typeof signedTx !== "string") {
-      res.status(400).json({ success: false, error: "signedTx (hex CBOR) is required" });
+    if (!unsignedTxHex || typeof unsignedTxHex !== "string") {
+      res.status(400).json({ success: false, error: "unsignedTxHex is required" });
+      return;
+    }
+    if (!signedWitnessSet || typeof signedWitnessSet !== "string") {
+      res.status(400).json({ success: false, error: "signedWitnessSet is required" });
       return;
     }
 
     console.log(`[certificateController] Submitting signed transaction...`);
-    const txHash = await submitSignedTx(signedTx);
+    const txHash = await submitSignedTx({ unsignedTxHex, signedWitnessSet });
 
     res.status(200).json({
       success: true,

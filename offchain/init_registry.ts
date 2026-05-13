@@ -14,8 +14,13 @@ async function main() {
     const adminAddress = await lucid.wallet().address();
     const adminPkh = paymentCredentialOf(adminAddress).hash;
 
-    console.log("Admin address:", adminAddress);
-    console.log("Admin PKH:", adminPkh);
+    console.log("\n--- Initialization Check ---");
+    console.log("Derived Admin Address:", adminAddress);
+    console.log("Derived Admin PKH:    ", adminPkh);
+    console.log("----------------------------\n");
+
+    console.log("IMPORTANT: Please verify that this address matches your Lace wallet address.");
+    console.log("If it DOES NOT match, the registry will be initialized for the wrong person.\n");
 
     const registryScript = {
         type: "PlutusV3",
