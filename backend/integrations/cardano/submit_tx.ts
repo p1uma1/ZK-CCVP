@@ -1,7 +1,8 @@
 import "dotenv/config";
 import {
-  Lucid, Blockfrost, Data, type Script, applyDoubleCborEncoding, fromText, fromHex, Constr, LucidEvolution, validatorToAddress,
-  validatorToScriptHash, getAddressDetails
+  Lucid, Blockfrost, Data, type Script, applyDoubleCborEncoding, fromText, fromHex, Constr,
+  LucidEvolution, validatorToAddress, validatorToScriptHash, getAddressDetails,
+  applyParamsToScript,
 } from "@lucid-evolution/lucid";
 import { buildCertificateDatum } from "./build_datum.js";
 import type { CanonicalCertificate } from "./canonicalize.js";
@@ -9,15 +10,14 @@ import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
 
-// Define __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Registry Details
-const REGISTRY_ADDRESS = "addr_test1wpdw8xlc7zq68f9mmq3ur04secy784rlfdtwjkd2tqk70jcdjz9rm";
-const REGISTRY_SCRIPT_HASH = "5ae39bf8f081a3a4bbd823c1beb0ce09e3d47f4b56e959aa582de7cb";
+// ── Config ────────────────────────────────────────────────────────────────────
+const REGISTRY_ADDRESS = "addr_test1wrn4gqe27zpeac55kqmrjxhnyggjp650dsg9wxg8cqwqthqrjy8zz";
+const REGISTRY_SCRIPT_HASH = "e754032af0839ee294b036391af3221120ea8f6c10571907c01c05dc";
 
-// We use manual Constr wrapping for datums to ensure compatibility with Aiken's single-constructor types
+// ── Schemas ───────────────────────────────────────────────────────────────────
 const CertificateDatumSchema = Data.Object({
   issuer_id: Data.Bytes(),
   report_id: Data.Bytes(),
@@ -38,9 +38,16 @@ const RegistryDatumSchema = Data.Object({
 });
 type RegistryDatum = { admin: string; issuers: string[]; version: bigint };
 
-/**
- * Initializes Lucid with a Blockfrost provider.
- */
+// ── Datum helpers (mirrored from test script) ─────────────────────────────────
+function decodeDatum(cbor: string): RegistryDatum {
+  return Data.from(cbor, RegistryDatumSchema as any) as RegistryDatum;
+}
+
+function encodeDatum(d: RegistryDatum): string {
+  return Data.to(d as any, RegistryDatumSchema as any);
+}
+
+// ── Lucid init ────────────────────────────────────────────────────────────────
 async function initLucid(): Promise<LucidEvolution> {
   const network = (process.env.CARDANO_NETWORK ?? "Preprod") as "Preprod" | "Preview" | "Mainnet";
   const blockfrostProjectId = process.env.BLOCKFROST_PROJECT_ID;
@@ -53,6 +60,7 @@ async function initLucid(): Promise<LucidEvolution> {
   return await Lucid(new Blockfrost(apiUrl, blockfrostProjectId), network);
 }
 
+// ── Validators ────────────────────────────────────────────────────────────────
 function getValidators() {
   const plutusPath = path.resolve(__dirname, "../../../contracts/cardano/plutus.json");
   const plutusJson = JSON.parse(fs.readFileSync(plutusPath, "utf-8"));
@@ -73,31 +81,24 @@ function getValidators() {
 
   const storageScript: Script = {
     type: "PlutusV3",
-    script: applyDoubleCborEncoding(storageValidator.compiledCode),
+    script: storageValidator.compiledCode,
   };
 
-  // The minting policy is parameterized by the registry script hash
   const policyScript: Script = {
     type: "PlutusV3",
-    script: applyParamsToScript(
-      applyDoubleCborEncoding(mintingPolicy.compiledCode),
-      [REGISTRY_SCRIPT_HASH]
-    )
+    script: applyParamsToScript(mintingPolicy.compiledCode, [REGISTRY_SCRIPT_HASH]),
   };
 
+  // Aiken compiledCode is already double-CBOR encoded — do NOT wrap again
   const registryScript: Script = {
     type: "PlutusV3",
-    script: applyDoubleCborEncoding(registryValidator.compiledCode),
+    script: registryValidator.compiledCode,
   };
 
   return { storageScript, policyScript, registryScript };
 }
 
-// Helper to handle applyParamsToScript which isn't directly in lucid-evolution exports sometimes
-// but we can use the one from utils or implement a simple version if needed.
-// Actually, Lucid Evolution HAS applyParamsToScript in its core.
-import { applyParamsToScript } from "@lucid-evolution/lucid";
-
+// ── Anchor TX ─────────────────────────────────────────────────────────────────
 /**
  * Builds an UNSIGNED transaction CBOR to be signed by a frontend wallet.
  */
@@ -106,17 +107,18 @@ export async function buildUnsignedAnchorTx(
   reportTypeInt: number,
   userAddress: string
 ) {
-  console.log("we are here\n")
+  console.log("we are here\n");
   const lucid = await initLucid();
   const { storageScript, policyScript } = getValidators();
 
   const storageAddress = validatorToAddress("Preprod", storageScript);
   const policyId = validatorToScriptHash(policyScript);
-  console.log("policy id: ", policyId);
+  console.log("policy id:", policyId);
+
   const assetName = fromText(cert.gem_id);
   const unit = policyId + assetName;
 
-  // 1. Prepare Datum
+  // 1. Prepare datum
   const issuedAt = Math.floor(Date.now() / 1000);
   const rawDatum = buildCertificateDatum(cert, reportTypeInt, issuedAt);
 
@@ -132,36 +134,38 @@ export async function buildUnsignedAnchorTx(
     toHex(rawDatum.issuer_pkh),
   ]));
 
-  // 2. Find Registry Reference Input
+  // 2. Find registry reference input
   const [registryUtxo] = await lucid.utxosAt(REGISTRY_ADDRESS);
-  if (!registryUtxo) throw new Error("Registry UTXO not found - cannot verify issuer authorization");
+  if (!registryUtxo) throw new Error("Registry UTXO not found — cannot verify issuer authorization");
 
-  // 3. Build Unsigned Transaction
+  // 3. Wallet setup
   const bech32Address = getAddressDetails(userAddress).address.bech32;
-  const issuerPkhHex = toHex(rawDatum.issuer_pkh);
-  // Fetch user's actual UTxOs so Lucid can select collateral and fee inputs
   const walletUtxos = await lucid.utxosAt(bech32Address);
   lucid.selectWallet.fromAddress(bech32Address, walletUtxos);
 
+  const issuerPkhHex = toHex(rawDatum.issuer_pkh);
+
+  // 4. Build unsigned TX
   const tx = await lucid
     .newTx()
     .readFrom([registryUtxo])
     .mintAssets(
       { [unit]: 1n },
-      Data.to(issuerPkhHex) // Redeemer: issuer_pkh bytes
+      Data.to(issuerPkhHex)  // Redeemer: issuer_pkh bytes
     )
     .attach.MintingPolicy(policyScript)
-    .addSignerKey(issuerPkhHex) // Minting policy requires issuer signature
+    .addSignerKey(issuerPkhHex)
     .pay.ToContract(
       storageAddress,
       { kind: "inline", value: encodedDatum },
-      { [unit]: 1n, lovelace: 2000000n } // Lock the NFT with the datum
+      { [unit]: 1n, lovelace: 2000000n }
     )
     .complete({ localUPLCEval: false });
 
   return tx.toString();
 }
 
+// ── Registry update TX ────────────────────────────────────────────────────────
 /**
  * Builds an UNSIGNED transaction CBOR for updating the issuer registry.
  */
@@ -173,23 +177,27 @@ export async function buildUnsignedRegistryUpdateTx(
   const lucid = await initLucid();
   const { registryScript } = getValidators();
 
-  // 1. Get ALL registry UTxOs (there may be duplicates from multiple initializations)
+  // 1. Fetch registry UTxOs
   const registryUtxos = await lucid.utxosAt(REGISTRY_ADDRESS);
-  if (registryUtxos.length === 0) throw new Error("Registry UTXO not found on-chain.");
+  if (registryUtxos.length === 0) throw new Error("No registry UTxOs found on-chain.");
   console.log("[Registry TX] registry utxos found:", registryUtxos.length);
 
-  const rawCbor = registryUtxos[0].datum;
+  // Use only the first UTxO — matches validator expectation of a single registry input
+  const registryUtxo = registryUtxos[0];
+  console.log("[Registry TX] using UTxO:", `${registryUtxo.txHash}#${registryUtxo.outputIndex}`);
+
+  const rawCbor = registryUtxo.datum;
   if (!rawCbor) throw new Error("Registry UTXO is missing an inline datum.");
 
-  // 2. Decode using Data.Object schema — matches Constr(0,[admin, issuers, version]) on-chain
-  const currentDatum = Data.from<RegistryDatum>(rawCbor, RegistryDatumSchema as any);
-  const { admin: adminPkh, issuers: currentIssuers, version: currentVersion } = currentDatum;
-  console.log("[Registry TX] adminPkh:", adminPkh);
-  console.log("[Registry TX] currentIssuers:", currentIssuers);
-  console.log("[Registry TX] currentVersion:", currentVersion.toString());
+  // 2. Decode current datum
+  const current = decodeDatum(rawCbor);
+  console.log("[Registry TX] adminPkh:", current.admin);
+  console.log("[Registry TX] currentIssuers:", current.issuers);
+  console.log("[Registry TX] currentVersion:", current.version.toString());
 
+  // 3. Compute new issuer list
   const normalizedPkh = issuerPkh.toLowerCase();
-  let newIssuers = [...currentIssuers];
+  let newIssuers = [...current.issuers];
 
   if (action === "Add") {
     if (newIssuers.includes(normalizedPkh)) throw new Error("Issuer already authorized.");
@@ -199,63 +207,58 @@ export async function buildUnsignedRegistryUpdateTx(
     newIssuers = newIssuers.filter((p) => p !== normalizedPkh);
   }
 
-  const encodedNextDatum = Data.to<RegistryDatum>(
-    { admin: adminPkh, issuers: newIssuers, version: currentVersion + 1n },
-    RegistryDatumSchema as any
-  );
-  console.log("[Registry TX] encodedNextDatum CBOR:", encodedNextDatum);
+  const newVersion = current.version + 1n;
 
-  // 3. Redeemer — AddIssuer: Constr(0,[pkh]), RemoveIssuer: Constr(1,[pkh])
+  // 4. Encode new datum
+  const encodedNextDatum = encodeDatum({
+    admin: current.admin,
+    issuers: newIssuers,
+    version: newVersion,
+  });
+  console.log("[Registry TX] encodedNextDatum CBOR:", encodedNextDatum);
+  console.log("[Registry TX] newIssuers:", newIssuers);
+  console.log("[Registry TX] newVersion:", newVersion.toString());
+
+  // 5. Build redeemer
+  // AddIssuer: Constr(0,[pkh]), RemoveIssuer: Constr(1,[pkh])
   const redeemer = action === "Add"
     ? Data.to(new Constr(0, [normalizedPkh]))
     : Data.to(new Constr(1, [normalizedPkh]));
+  console.log("[Registry TX] redeemer CBOR:", redeemer);
 
-  // 4. Wallet setup
+  // 6. Wallet setup
   const bech32Address = getAddressDetails(userAddress).address.bech32;
   const walletUtxos = await lucid.utxosAt(bech32Address);
   console.log("[Registry TX] walletUtxos count:", walletUtxos.length);
   if (walletUtxos.length === 0) throw new Error("Wallet has no UTxOs — fund it from the faucet.");
   lucid.selectWallet.fromAddress(bech32Address, walletUtxos);
 
-  // Collateral must be a pure-ADA UTxO — pass the UTxO object, not the amount
-  const collateralUtxo = walletUtxos
-    .filter(u => Object.keys(u.assets).length === 1)
-    .sort((a, b) => Number(b.assets.lovelace - a.assets.lovelace))[0];
-  if (!collateralUtxo) throw new Error("No pure-ADA UTxO available for collateral.");
-  console.log("[Registry TX] collateral:", `${collateralUtxo.txHash}#${collateralUtxo.outputIndex}`);
-
-  // 5. Spend ALL registry UTxOs (consolidates duplicates into one clean output)
+  // 7. Build unsigned TX — let Lucid auto-select collateral (no setCollateral override)
   const tx = await lucid
     .newTx()
-    .collectFrom(registryUtxos, redeemer)
+    .collectFrom([registryUtxo], redeemer)
     .attach.SpendingValidator(registryScript)
-    .addSignerKey(adminPkh)
+    .addSignerKey(current.admin)
     .pay.ToContract(
       REGISTRY_ADDRESS,
       { kind: "inline", value: encodedNextDatum },
       { lovelace: 3000000n }
     )
-    .complete({
-      localUPLCEval: false,
-      setCollateral: collateralUtxo as any,
-    });
+    .complete({ localUPLCEval: false });
 
   return tx.toString();
 }
 
+// ── Submit ────────────────────────────────────────────────────────────────────
 /**
  * Submits an already-signed transaction CBOR to the Cardano network.
  */
-export async function submitSignedTx(
-  signedTxCbor: string
-): Promise<string> {
+export async function submitSignedTx(signedTxCbor: string): Promise<string> {
   const lucid = await initLucid();
-
-  const txHash = await lucid.config().provider!.submitTx(signedTxCbor);
-
-  return txHash;
+  return await lucid.config().provider!.submitTx(signedTxCbor);
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
