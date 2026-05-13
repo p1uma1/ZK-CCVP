@@ -381,3 +381,75 @@ body {
   .form-grid .col-2 { grid-column: 1; }
   .app-topbar { padding: 0 1.25rem; }
 }
+/* ─── Tabs / Navigation ────────────────────────────────────── */
+.nav-tabs {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--gs-200);
+}
+
+.nav-tab {
+  padding: 0.75rem 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--gs-400);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  background: none;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+.nav-tab:hover { color: var(--gs-600); }
+.nav-tab.active { color: var(--gs-950); border-bottom-color: var(--gs-950); }
+
+/* ─── Admin Portal Specific ───────────────────────────────── */
+.admin-portal-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.portal-header {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 2.5rem;
+}
+
+.icon-badge {
+  width: 52px;
+  height: 52px;
+  background: var(--gs-900);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1.25rem;
+}
+
+.stat-card {
+  background: var(--white);
+  border: 1px solid var(--gs-200);
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}

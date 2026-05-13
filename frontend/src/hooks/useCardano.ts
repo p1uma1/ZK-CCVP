@@ -33,7 +33,13 @@ export function useCardano() {
     try {
       const key = (import.meta as any).env?.VITE_BLOCKFROST_PROJECT_ID || 'preprodYKOGh6iToLhXzKjydl3LmUDaszQWKqfu';
       console.log('[useCardano] Initializing Lucid...');
-      const l = await Lucid.new(new Blockfrost('https://cardano-preprod.blockfrost.io/api/v0', key), 'Preprod');
+      const l = await Lucid.new(
+        new Blockfrost(
+          "https://cardano-preprod.blockfrost.io/api/v0",
+          key
+        ),
+        "Preprod"
+      );
       setLucid(l);
     } catch (e) {
       console.error('Lucid init error', e);

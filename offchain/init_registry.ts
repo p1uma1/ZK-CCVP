@@ -8,7 +8,7 @@ async function main() {
     const seed = process.env.ADMIN_SEED;
     if (!seed) throw new Error("Missing ADMIN_SEED");
 
-    // ✅ mutates lucid in place, don't reassign
+
     lucid.selectWallet.fromSeed(seed);
 
     const adminAddress = await lucid.wallet().address();

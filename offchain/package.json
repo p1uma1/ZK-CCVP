@@ -1,7 +1,8 @@
 {
   "dependencies": {
     "@lucid-evolution/lucid": "^0.4.30",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "lucid-cardano": "^0.10.11"
   },
   "devDependencies": {
     "@types/node": "^25.7.0",

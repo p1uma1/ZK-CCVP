@@ -16,7 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "lucid-cardano": "^0.10.11"
+    "@lucid-evolution/lucid": "^0.4.30"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",

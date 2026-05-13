@@ -1,16 +1,18 @@
 import "dotenv/config";
-import { Lucid, Blockfrost, Data, type SpendingValidator } from "lucid-cardano";
+import { Lucid, Blockfrost, Data, type Script, applyDoubleCborEncoding, fromText } from "@lucid-evolution/lucid";
 import { buildCertificateDatum } from "./build_datum.js";
 import type { CanonicalCertificate } from "./canonicalize.js";
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { applyDoubleCborEncoding } from "lucid-cardano";
-
 
 // Define __dirname for ESM
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Registry Details
+const REGISTRY_ADDRESS = "addr_test1wpdw8xlc7zq68f9mmq3ur04secy784rlfdtwjkd2tqk70jcdjz9rm";
+const REGISTRY_SCRIPT_HASH = "5ae39bf8f081a3a4bbd823c1beb0ce09e3d47f4b56e959aa582de7cb";
 
 const CertificateDatumSchema = Data.Object({
   issuer_id: Data.Bytes(),
@@ -24,37 +26,55 @@ const CertificateDatumSchema = Data.Object({
   issuer_pkh: Data.Bytes(),
 });
 
-type CertificateDatum = Data.Static<typeof CertificateDatumSchema>;
-
 /**
- * Initializes Lucid with a Blockfrost provider (No private key needed).
+ * Initializes Lucid with a Blockfrost provider.
  */
 async function initLucid(): Promise<Lucid> {
-  const network = (process.env.CARDANO_NETWORK ?? "Preprod") as any;
+  const network = (process.env.CARDANO_NETWORK ?? "Preprod") as "Preprod" | "Preview" | "Mainnet";
   const blockfrostProjectId = process.env.BLOCKFROST_PROJECT_ID;
-  const apiUtl = `https://cardano-${network.toLowerCase()}.blockfrost.io/api/v0`;
+  const apiUrl = `https://cardano-${network.toLowerCase()}.blockfrost.io/api/v0`;
 
   if (!blockfrostProjectId) {
     throw new Error("BLOCKFROST_PROJECT_ID is not set in .env");
   }
 
-  return await Lucid.new(new Blockfrost(apiUtl, blockfrostProjectId), network);
+  return await Lucid.new(new Blockfrost(apiUrl, blockfrostProjectId), network);
 }
 
-
-function getValidator(): SpendingValidator {
+function getValidators() {
   const plutusPath = path.resolve(__dirname, "../../../contracts/cardano/plutus.json");
   const plutusJson = JSON.parse(fs.readFileSync(plutusPath, "utf-8"));
-  const validator = plutusJson.validators.find(
+  
+  const storageValidator = plutusJson.validators.find(
     (v: any) => v.title === "certificate_validator.certificate_validator.spend"
   );
-  if (!validator) throw new Error("Validator not found in plutus.json");
+  const mintingPolicy = plutusJson.validators.find(
+    (v: any) => v.title === "certificate_policy.certificate_policy.mint"
+  );
 
-  return {
-    type: "PlutusV2",
-    script: applyDoubleCborEncoding(validator.compiledCode),
+  if (!storageValidator || !mintingPolicy) throw new Error("Validators not found in plutus.json");
+
+  const storageScript: Script = {
+    type: "PlutusV3",
+    script: applyDoubleCborEncoding(storageValidator.compiledCode),
   };
+
+  // The minting policy is parameterized by the registry script hash
+  const policyScript: Script = {
+    type: "PlutusV3",
+    script: applyParamsToScript(
+        applyDoubleCborEncoding(mintingPolicy.compiledCode),
+        [REGISTRY_SCRIPT_HASH]
+    )
+  };
+
+  return { storageScript, policyScript };
 }
+
+// Helper to handle applyParamsToScript which isn't directly in lucid-evolution exports sometimes
+// but we can use the one from utils or implement a simple version if needed.
+// Actually, Lucid Evolution HAS applyParamsToScript in its core.
+import { applyParamsToScript } from "@lucid-evolution/lucid";
 
 /**
  * Builds an UNSIGNED transaction CBOR to be signed by a frontend wallet.
@@ -62,19 +82,20 @@ function getValidator(): SpendingValidator {
 export async function buildUnsignedAnchorTx(
   cert: CanonicalCertificate,
   reportTypeInt: number,
-  userAddress: string // Needed to select UTXOs for the transaction
+  userAddress: string
 ) {
-
   const lucid = await initLucid();
-
-  const validator = getValidator();
-  const scriptAddress = lucid.utils.validatorToAddress(validator);
+  const { storageScript, policyScript } = getValidators();
+  
+  const storageAddress = lucid.utils.validatorToAddress(storageScript);
+  const policyId = lucid.utils.validatorToScriptHash(policyScript);
+  const assetName = fromText(cert.gem_id);
+  const unit = policyId + assetName;
 
   // 1. Prepare Datum
   const issuedAt = Math.floor(Date.now() / 1000);
   const rawDatum = buildCertificateDatum(cert, reportTypeInt, issuedAt);
 
-  // Pass the object DIRECTLY. Lucid's Data.Nullable handles the "Some" wrapping.
   const lucidDatum = {
     issuer_id: toHex(rawDatum.issuer_id),
     report_id: toHex(rawDatum.report_id),
@@ -87,50 +108,40 @@ export async function buildUnsignedAnchorTx(
     issuer_pkh: toHex(rawDatum.issuer_pkh),
   };
 
-  console.log("[Cardano] Datum Keys count:", Object.keys(lucidDatum).length);
-  console.log("[Cardano] Datum fields:", JSON.stringify(lucidDatum, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
+  const encodedDatum = Data.to(lucidDatum, CertificateDatumSchema);
 
-  // 2. Select the user's wallet as the source of funds
-  lucid.selectWalletFrom({ address: userAddress });
-
-  const encodedDatum = Data.to(lucidDatum, CertificateDatumSchema as any);
-  console.log("[Cardano] Encoded Datum Hex:", encodedDatum);
+  // 2. Find Registry Reference Input
+  const [registryUtxo] = await lucid.utxosAt(REGISTRY_ADDRESS);
+  if (!registryUtxo) throw new Error("Registry UTXO not found - cannot verify issuer authorization");
 
   // 3. Build Unsigned Transaction
-  // The datum is submitted as an "inline datum" attached to the script output.
-  console.log("[Cardano] Building transaction and attaching datum...");
+  lucid.selectWallet.fromAddress(userAddress, []);
+
   const tx = await lucid
     .newTx()
-    .payToContract(
-      scriptAddress,
-      { inline: encodedDatum },
-      { lovelace: 2000000n }
+    .readFrom([registryUtxo])
+    .mintAssets(
+        { [unit]: 1n },
+        Data.to(toHex(rawDatum.issuer_pkh)) // Redeemer: issuer_pkh
+    )
+    .pay.ToContract(
+      storageAddress,
+      { kind: "inline", value: encodedDatum },
+      { [unit]: 1n, lovelace: 2000000n } // Lock the NFT with the datum
     )
     .complete();
 
-  // Return the CBOR string 
   return tx.toString();
 }
 
 /**
  * Submits an already-signed transaction CBOR to the Cardano network.
- * Called by the backend after the frontend has signed the tx.
  */
 export async function submitSignedTx(
   signedTxCbor: string
 ): Promise<string> {
-
   const lucid = await initLucid();
-
-  console.log(
-    `[Cardano] Submitting signed transaction: ${signedTxCbor.substring(0, 50)}...`
-  );
-
-  // Submit EXACT signed CBOR from frontend
-  const txHash = await lucid.provider.submitTx(signedTxCbor);
-
-  console.log("[Cardano] Transaction submitted. Hash:", txHash);
-
+  const txHash = await lucid.fromTx(signedTxCbor).submit();
   return txHash;
 }
 

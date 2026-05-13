@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useCardano } from './hooks/useCardano';
-import { certificateService } from './services/api';
+import { Data, fromText, Constr, paymentCredentialOf, fromHex } from 'lucid-cardano';
+import { CARDANO_CONFIG, getCertificatePolicyScript } from './config/cardano';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { CertificateForm } from './components/CertificateForm';
+import { AdminPortal } from './components/AdminPortal';
 import type { CertificateFormData } from './types/index';
 import './index.css';
 
@@ -20,6 +22,7 @@ function App() {
     disconnectWallet
   } = useCardano();
 
+  const [activeTab, setActiveTab] = useState<'issuer' | 'admin'>('issuer');
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<CertificateFormData>({
     gemId: 'GEM-LK-SAP-2024-001',
@@ -29,6 +32,18 @@ function App() {
     reportType: 1,
     ipfsLink: 'ipfs://QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco',
   });
+
+  // Autofill issuer PKH when address changes
+  useEffect(() => {
+    if (address) {
+      try {
+        const pkh = paymentCredentialOf(address).hash;
+        setFormData(prev => ({ ...prev, issuerPkh: pkh }));
+      } catch (e) {
+        console.error("Error extracting PKH from address", e);
+      }
+    }
+  }, [address]);
 
   const handleRegisterAndSign = async () => {
     if (!address) {
@@ -44,49 +59,53 @@ function App() {
     setStatus(null);
 
     try {
-      // ── Step 1: Ask backend to build the unsigned tx ─────────────────
-      setStatus({ type: 'info', msg: '(1/3) Building transaction on server…' });
-      const buildRes = await certificateService.createCertificate(formData, address);
+      setStatus({ type: 'info', msg: '(1/3) Preparing transaction data…' });
 
-      if (!buildRes.success || !buildRes.data) {
-        throw new Error(buildRes.error || 'Backend failed to build tx');
-      }
+      // 1. Get current Registry UTXO for reference input
+      const [registryUtxo] = await lucid.utxosAt(CARDANO_CONFIG.REGISTRY_ADDRESS);
+      if (!registryUtxo) throw new Error('Registry UTXO not found on-chain.');
 
-      const { unsignedTx, gemId, reportId } = buildRes.data;
+      // 2. Prepare Datum
+      const datum = Data.to(new Constr(0, [
+        fromText(formData.issuerId),
+        fromText(formData.reportId),
+        BigInt(formData.reportType),
+        fromText(formData.gemId),
+        fromText(formData.issuerPkh),
+        BigInt(Date.now()),
+        1n,
+        fromText(formData.ipfsLink.replace('ipfs://', '')),
+        formData.issuerPkh,
+      ]));
+      const assetName = fromText(formData.gemId);
+      const unit = CARDANO_CONFIG.CERTIFICATE_POLICY_ID + assetName;
 
-      // ── Step 2: Sign with Wallet (CIP-30) ─────────────────────────────
-      setStatus({ type: 'info', msg: `(2/3) Awaiting signature in ${selectedWallet.toUpperCase()} wallet…` });
-      
-      console.log('[App] Debug - Lucid instance:', !!lucid);
-      console.log('[App] Debug - Wallet connected:', !!lucid?.wallet);
-      
-      if (!lucid || !lucid.wallet) {
-        throw new Error('Wallet connection lost. Please reconnect your wallet.');
-      }
+      // 3. Build Transaction
+      setStatus({ type: 'info', msg: `(2/3) Awaiting signature for ${formData.gemId}…` });
 
-      const tx = lucid.fromTx(unsignedTx);
+      const tx = await (lucid as any)
+        .newTx()
+        .readFrom([registryUtxo]) // Reference input
+        .mintAssets({ [unit]: 1n }, Data.to(formData.issuerPkh)) // Mint 1 token with issuer PKH as redeemer
+        .attachMintingPolicy(getCertificatePolicyScript())
+        .payToContract(
+          CARDANO_CONFIG.CERTIFICATE_ADDRESS,
+          { inline: datum },
+          { [unit]: 1n, lovelace: 2_000_000n } // Store the NFT at the certificate storage address
+        )
+        .complete();
+
       const signedTx = await tx.sign().complete();
-      const signedCbor = signedTx.toString();
-
-      // ── Step 3: Send signed tx to backend for submission ─────────────
-      setStatus({ type: 'info', msg: '(3/3) Submitting to Cardano network…' });
-      const submitRes = await certificateService.submitTransaction(signedCbor);
-
-      if (!submitRes.success || !submitRes.data) {
-        throw new Error(submitRes.error || 'Submission failed');
-      }
-
-      const { txHash } = submitRes.data;
+      const txHash = await signedTx.submit();
 
       setStatus({
         type: 'success',
-        msg: `✓ Certificate anchored! Gem: ${gemId} | Report: ${reportId} | Tx: ${txHash.slice(0, 20)}…`,
+        msg: `✓ Certificate anchored! Gem: ${formData.gemId} | Tx: ${txHash.slice(0, 20)}…`,
       });
       console.log('[ZK-CCVP] Transaction Hash:', txHash);
 
     } catch (e: any) {
       console.error('[ZK-CCVP] Error:', e);
-      // User rejected wallet prompt — don't show scary error
       const msg = e?.message?.includes('user declined') || e?.message?.includes('User declined')
         ? 'Wallet signing was cancelled.'
         : e.message || 'Transaction failed.';
@@ -108,13 +127,38 @@ function App() {
       />
 
       <div className="app-content">
+        <div className="nav-tabs">
+          <button
+            className={`nav-tab ${activeTab === 'issuer' ? 'active' : ''}`}
+            onClick={() => setActiveTab('issuer')}
+          >
+            Issuer Portal
+          </button>
+          <button
+            className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            Admin Control
+          </button>
+        </div>
+
         <div className="page-grid">
-          <CertificateForm
-            formData={formData}
-            setFormData={setFormData}
-            loading={loading}
-            onRegister={handleRegisterAndSign}
-          />
+          <div className="main-area">
+            {activeTab === 'issuer' ? (
+              <CertificateForm
+                formData={formData}
+                setFormData={setFormData}
+                loading={loading}
+                onRegister={handleRegisterAndSign}
+              />
+            ) : (
+              <AdminPortal
+                lucid={lucid}
+                address={address}
+                setStatus={setStatus}
+              />
+            )}
+          </div>
           <Sidebar status={status} address={address} />
         </div>
       </div>

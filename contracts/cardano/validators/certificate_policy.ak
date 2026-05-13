@@ -4,6 +4,7 @@ use cardano/address.{Script}
 use cardano/assets.{PolicyId, tokens}
 use cardano/transaction.{InlineDatum, Transaction}
 use types/registry_datum.{RegistryDatum}
+use aiken/crypto.{VerificationKeyHash}
 
 /// Certificate Minting Policy
 /// ──────────────────────────────────────────────────────────────────────────
@@ -20,7 +21,7 @@ use types/registry_datum.{RegistryDatum}
 /// The asset name is set off-chain to the gem ID bytes, making each
 /// certificate token uniquely identifiable by (policy_id, gem_id).
 validator certificate_policy(registry_script_hash: ByteArray) {
-  mint(issuer_pkh: ByteArray, policy_id: PolicyId, self: Transaction) {
+  mint(issuer_pkh: VerificationKeyHash , policy_id: PolicyId, self: Transaction) {
     // ── 1. Issuer must sign the transaction ────────────────────────────────
     expect list.has(self.extra_signatories, issuer_pkh)?
 

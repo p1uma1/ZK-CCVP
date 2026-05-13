@@ -10,9 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@cardano-sdk/crypto": "^0.4.5",
+    "lucid-cardano": "0.10.11",
     "axios": "^1.16.0",
     "framer-motion": "^12.38.0",
-    "lucid-cardano": "^0.10.11",
+    "libsodium-wrappers-sumo": "^0.8.4",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
@@ -23,12 +25,16 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
+    "rollup": "^4.60.3",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.58.2",
-    "vite": "^8.0.10"
+    "vite": "^8.0.12",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.6.0"
   }
 }
